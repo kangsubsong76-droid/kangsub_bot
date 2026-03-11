@@ -1,5 +1,10 @@
 """텔레그램 봇 — 양방향 알림 + 명령 처리"""
+import sys
 import asyncio
+
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from datetime import datetime
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
