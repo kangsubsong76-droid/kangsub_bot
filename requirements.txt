@@ -1,0 +1,39 @@
+# KangSub Bot — 패키지 목록
+# pip install -r requirements.txt
+
+# 데이터 수집
+yfinance==0.2.36
+pykrx==1.0.47
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# 데이터 처리
+pandas==2.2.0
+numpy==1.26.4
+
+# 기술적 분석
+pandas-ta==0.3.14b
+
+# 스케줄러
+APScheduler==3.10.4
+
+# 텔레그램 봇
+python-telegram-bot==21.1.1
+
+# Notion
+notion-client==2.2.1
+
+# 대시보드
+streamlit==1.33.0
+plotly==5.20.0
+
+# 환경변수
+python-dotenv==1.0.1
+
+# 유틸
+pytz==2024.1
+
+# Windows COM (EC2 Windows에서만)
+# pywin32==306         ← Windows EC2에서 pip install pywin32
+# pykiwoom             ← Windows EC2에서 pip install pykiwoom
