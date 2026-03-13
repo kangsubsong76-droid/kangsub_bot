@@ -8,14 +8,13 @@ KangSub Bot — 메인 실행 파일
   python main.py --once      # 1회 시그널 생성 후 종료
 """
 import sys
+import json
 import asyncio
+import argparse
 
 # Windows asyncio 이벤트 루프 정책 (signal 모듈 호환성)
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-import json
-import asyncio
-import argparse
 from datetime import datetime
 from pathlib import Path
 
