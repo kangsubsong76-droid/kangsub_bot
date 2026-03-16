@@ -2,8 +2,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
-from signal.technical import TechnicalSignal
-from signal.market_condition import MarketCondition
+from signals.technical import TechnicalSignal
+from signals.market_condition import MarketCondition
 from utils.logger import setup_logger
 
 log = setup_logger("signal_engine")

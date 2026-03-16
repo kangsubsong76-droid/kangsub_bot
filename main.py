@@ -25,11 +25,11 @@ from core.portfolio_manager import PortfolioManager
 from core.risk_manager import RiskManager
 from core.order_executor import OrderExecutor
 
-from signal.technical import analyze as tech_analyze
-from signal.market_condition import analyze_market
-from signal.news_analyzer import NewsAnalyzer
-from signal.signal_engine import SignalEngine
-from signal.dart_client import DartClient
+from signals.technical import analyze as tech_analyze
+from signals.market_condition import analyze_market
+from signals.news_analyzer import NewsAnalyzer
+from signals.signal_engine import SignalEngine
+from signals.dart_client import DartClient
 
 from data.market_data import (
     get_stock_ohlcv, get_kospi_ohlcv, get_usdkrw,
