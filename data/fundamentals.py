@@ -173,14 +173,43 @@ def _calc_pbr(t, info: dict) -> float | None:
     return None
 
 
+def _fetch_yfinance_ticker(ticker_sym: str) -> tuple:
+    """yfinance Ticker 객체와 info 반환. 현재가 없으면 (None, None)"""
+    try:
+        t = yf.Ticker(ticker_sym)
+        info = t.info or {}
+        if info.get("currentPrice") or info.get("regularMarketPrice"):
+            return t, info
+    except Exception as e:
+        log.debug(f"yfinance ticker 조회 실패 ({ticker_sym}): {e}")
+    return None, None
+
+
 def _fetch_yfinance(code: str) -> dict | None:
     if not yf:
         return None
     try:
-        t = yf.Ticker(f"{code.zfill(6)}.KS")
-        info = t.info or {}
+        padded = code.zfill(6)
 
-        if not info.get("currentPrice") and not info.get("regularMarketPrice"):
+        # KOSPI(.KS) 먼저, 재무 데이터 없으면 KOSDAQ(.KQ) 폴백
+        t, info = _fetch_yfinance_ticker(f"{padded}.KS")
+        used_suffix = ".KS"
+
+        # .KS에서 PER/ROE 모두 없으면 .KQ 시도
+        if info is not None:
+            has_fundamentals = info.get("trailingPE") or info.get("forwardPE") or info.get("returnOnEquity")
+            if not has_fundamentals:
+                t2, info2 = _fetch_yfinance_ticker(f"{padded}.KQ")
+                if info2 is not None and (info2.get("trailingPE") or info2.get("forwardPE") or info2.get("returnOnEquity")):
+                    t, info = t2, info2
+                    used_suffix = ".KQ"
+                    log.debug(f"{padded}: .KQ suffix 사용")
+        else:
+            # .KS 자체가 없으면 .KQ 시도
+            t, info = _fetch_yfinance_ticker(f"{padded}.KQ")
+            used_suffix = ".KQ"
+
+        if info is None:
             return None
 
         per = info.get("trailingPE") or info.get("forwardPE")
@@ -188,7 +217,7 @@ def _fetch_yfinance(code: str) -> dict | None:
         roe_raw = info.get("returnOnEquity")
         roe = round(roe_raw * 100, 2) if roe_raw else None
 
-        # 한국 주식(KS)은 dividendYield가 항상 % 단위로 반환됨
+        # 한국 주식(KS/KQ)은 dividendYield가 항상 % 단위로 반환됨
         # (예: 1.17 = 1.17%, 0.31 = 0.31%) — × 100 하면 안 됨
         div_raw = info.get("dividendYield")
         div = round(div_raw, 2) if div_raw else None
@@ -201,7 +230,7 @@ def _fetch_yfinance(code: str) -> dict | None:
             "roe": roe,
             "eps": round(eps, 0) if eps else None,
             "div_yield": div,
-            "source": "yfinance",
+            "source": f"yfinance{used_suffix}",
             "as_of": datetime.now().strftime("%Y-%m-%d"),
             "updated_at": datetime.now().isoformat(),
         }
