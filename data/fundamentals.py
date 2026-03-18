@@ -187,8 +187,15 @@ def _fetch_yfinance(code: str) -> dict | None:
         pbr = info.get("priceToBook") or _calc_pbr(t, info)
         roe_raw = info.get("returnOnEquity")
         roe = round(roe_raw * 100, 2) if roe_raw else None
+
+        # 한국 주식(KS)은 dividendYield가 이미 % 단위로 반환됨 (1.17 = 1.17%)
+        # 미국 주식은 소수 단위 (0.02 = 2%) → 1 이상이면 이미 % 단위로 판단
         div_raw = info.get("dividendYield")
-        div = round(div_raw * 100, 2) if div_raw else None
+        if div_raw:
+            div = round(div_raw if div_raw >= 0.5 else div_raw * 100, 2)
+        else:
+            div = None
+
         eps = info.get("trailingEps")
 
         return {
