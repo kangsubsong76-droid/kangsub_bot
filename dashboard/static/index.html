@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>KangSub Bot</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0b0f1a;
+  --card: #111827;
+  --card2: #1a2235;
+  --border: #1f2d45;
+  --accent: #00c896;
+  --accent2: #3b82f6;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --tab-h: 60px;
+  --header-h: 100px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; font-size: 14px; overflow-x: hidden; }
+.header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: #080d16; border-bottom: 1px solid var(--border); }
+.header-top { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 4px; }
+.logo { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.ticker-wrap { overflow: hidden; white-space: nowrap; padding: 6px 0; border-top: 1px solid var(--border); }
+.ticker-inner { display: inline-flex; animation: ticker 30s linear infinite; }
+.ticker-item { padding: 0 20px; font-size: 12px; }
+.ticker-item .sym { color: var(--muted); }
+.ticker-item .val { font-weight: 600; }
+.up { color: var(--accent); }
+.dn { color: var(--red); }
+@keyframes ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+.content { margin-top: var(--header-h); margin-bottom: var(--tab-h); padding: 12px; }
+.tab-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; background: #080d16; border-top: 1px solid var(--border); display: flex; height: var(--tab-h); }
+.tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10px; color: var(--muted); cursor: pointer; border: none; background: none; transition: color .2s; }
+.tab.active { color: var(--accent); }
+.tab svg { width: 20px; height: 20px; }
+.page { display: none; }
+.page.active { display: block; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.card-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; }
+.big-num { font-size: 28px; font-weight: 700; letter-spacing: -1px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.stat-box { background: var(--card2); border-radius: 8px; padding: 10px; }
+.stat-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+.stat-value { font-size: 15px; font-weight: 600; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+.badge-sector { background: #1e3a5f; color: #60a5fa; }
+.badge-div { background: #1a3a2a; color: #4ade80; }
+.holding-row { border-bottom: 1px solid var(--border); padding: 10px 0; }
+.holding-row:last-child { border-bottom: none; }
+.holding-name { font-weight: 600; font-size: 14px; }
+.holding-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.holding-right { text-align: right; }
+.pnl-pos { color: var(--accent); }
+.pnl-neg { color: var(--red); }
+.pnl-neu { color: var(--muted); }
+.progress-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; }
+.progress-fill { height: 100%; border-radius: 2px; background: var(--accent); }
+.news-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.news-item:last-child { border-bottom: none; }
+.news-title { font-size: 13px; line-height: 1.4; }
+.news-meta { font-size: 10px; color: var(--muted); margin-top: 4px; }
+.signal-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.signal-row:last-child { border-bottom: none; }
+.signal-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.signal-buy { background: var(--accent); }
+.signal-sell { background: var(--red); }
+.signal-watch { background: var(--yellow); }
+.signal-hold { background: var(--muted); }
+.score-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 4px; }
+.score-fill { height: 100%; border-radius: 2px; }
+.div-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.div-row:last-child { border-bottom: none; }
+.yield-badge { background: #1a3a2a; color: #4ade80; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.chart-wrap { height: 160px; margin-top: 8px; }
+.refresh-btn { position: fixed; right: 16px; bottom: calc(var(--tab-h) + 16px); z-index: 99; width: 40px; height: 40px; border-radius: 50%; background: var(--accent2); border: none; color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(59,130,246,.4); }
+.loading { text-align: center; color: var(--muted); padding: 40px; font-size: 13px; }
+.policy-tag { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; margin-right: 4px; margin-bottom: 4px; }
+.tag-ai { background: #1e293b; color: #60a5fa; }
+.tag-defense { background: #1c2a1c; color: #4ade80; }
+.tag-energy { background: #2a1c1c; color: #f87171; }
+.tag-finance { background: #1e1c2a; color: #a78bfa; }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+.empty-icon { font-size: 40px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<div class="header">
+  <div class="header-top">
+    <span class="logo"><span class="status-dot"></span>KANGSUB BOT</span>
+    <span id="server-time" style="font-size:11px;color:var(--muted)"></span>
+  </div>
+  <div class="ticker-wrap">
+    <div class="ticker-inner" id="ticker">
+      <span class="ticker-item"><span class="sym">KOSPI </span><span class="val" id="tk-kospi">--</span></span>
+      <span class="ticker-item"><span class="sym">KOSDAQ </span><span class="val" id="tk-kosdaq">--</span></span>
+      <span class="ticker-item"><span class="sym">USD/KRW </span><span class="val" id="tk-usd">--</span></span>
+      <span class="ticker-item"><span class="sym">S&amp;P500 </span><span class="val" id="tk-sp">--</span></span>
+      <span class="ticker-item"><span class="sym">KOSPI </span><span class="val" id="tk-kospi2">--</span></span>
+      <span class="ticker-item"><span class="sym">KOSDAQ </span><span class="val" id="tk-kosdaq2">--</span></span>
+      <span class="ticker-item"><span class="sym">USD/KRW </span><span class="val" id="tk-usd2">--</span></span>
+      <span class="ticker-item"><span class="sym">S&amp;P500 </span><span class="val" id="tk-sp2">--</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- 탭 컨텐츠 -->
+<div class="content">
+
+  <!-- 자산 탭 -->
+  <div class="page active" id="page-asset">
+    <div class="card">
+      <div class="card-title">총 자산 현황</div>
+      <div class="big-num" id="total-value">₩100,000,000</div>
+      <div style="margin-top:6px;font-size:12px;color:var(--muted)">총 투자원금 ₩100,000,000</div>
+      <div class="grid3" style="margin-top:12px">
+        <div class="stat-box">
+          <div class="stat-label">금일 수익</div>
+          <div class="stat-value" id="daily-pnl">-</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">이달 누적</div>
+          <div class="stat-value" id="month-pnl">-</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">전체 누적</div>
+          <div class="stat-value" id="total-pnl">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">투자금액</div>
+        <div class="stat-value" id="invested">₩0</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px" id="inv-ratio">투자비율 0%</div>
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">현금 잔고</div>
+        <div class="stat-value" id="cash-val">₩100,000,000</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px" id="cash-ratio">현금비율 100%</div>
+      </div>
+    </div>
+    <div style="margin-bottom:10px"></div>
+
+    <div class="card">
+      <div class="card-title">섹터별 자산 배분</div>
+      <div class="chart-wrap"><canvas id="sector-chart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">포트폴리오 구분</div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span>일반 섹터 (60%)</span><span id="gen-val">₩0</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="gen-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:10px">
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span style="color:var(--accent)">고배당 (40%)</span><span id="div-val">₩0</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="div-bar" style="width:0%;background:#4ade80"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">시스템 상태</div>
+      <div id="sys-status" class="loading">로딩 중...</div>
+    </div>
+  </div>
+
+  <!-- 종목 탭 -->
+  <div class="page" id="page-holdings">
+    <div class="card">
+      <div class="card-title">보유 종목 <span id="holdings-count" style="color:var(--accent)">0</span>개 · 수익률 순</div>
+      <div id="holdings-list">
+        <div class="empty-state">
+          <div class="empty-icon">📊</div>
+          <div>보유 종목 없음</div>
+          <div style="font-size:11px;margin-top:8px">페이퍼 트레이딩 중 · 매매 시그널 대기</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">오늘의 매매 시그널</div>
+      <div id="signals-list" class="loading">로딩 중...</div>
+    </div>
+  </div>
+
+  <!-- 시장 탭 -->
+  <div class="page" id="page-market">
+    <div class="card">
+      <div class="card-title">시장 현황</div>
+      <div class="grid2" id="market-cards">
+        <div class="stat-box">
+          <div class="stat-label">KOSPI</div>
+          <div class="stat-value" id="m-kospi">--</div>
+          <div id="m-kospi-chg" style="font-size:11px"></div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">KOSDAQ</div>
+          <div class="stat-value" id="m-kosdaq">--</div>
+          <div id="m-kosdaq-chg" style="font-size:11px"></div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">USD/KRW</div>
+          <div class="stat-value" id="m-usd">--</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">S&amp;P500</div>
+          <div class="stat-value" id="m-sp">--</div>
+          <div id="m-sp-chg" style="font-size:11px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🏛 이재명 정부 핵심 정책 섹터</div>
+      <div style="margin-bottom:8px">
+        <span class="policy-tag tag-ai">AI·반도체</span>
+        <span class="policy-tag tag-defense">K-방산</span>
+        <span class="policy-tag tag-energy">재생에너지</span>
+        <span class="policy-tag tag-finance">밸류업·금융</span>
+        <span class="policy-tag tag-ai">피지컬AI·로봇</span>
+        <span class="policy-tag tag-energy">외교·한중</span>
+        <span class="policy-tag tag-finance">중소·벤처</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6">
+        반도체 공급망 강화 · 방산 수출 확대 · RE100 재생에너지 전환<br>
+        금융 밸류업 프로그램 · 로봇 산업 육성 · 한중 외교 정상화
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎯 핵심 Watchlist</div>
+      <div id="watchlist-content">
+        <div class="loading">시그널 데이터 로딩 중...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📰 주요 뉴스 하이라이트</div>
+      <div id="news-list">
+        <div class="news-item">
+          <div class="news-title">🔴 DART 공시 모니터링 활성화 중</div>
+          <div class="news-meta">실시간 부정 공시 감지 · 자동 손절 연동</div>
+        </div>
+        <div class="news-item">
+          <div class="news-title">📊 주간 재무 데이터 자동 갱신 (매주 월요일)</div>
+          <div class="news-meta">22/23종목 PER·PBR·ROE 2025년 기준 수신 완료</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 배당 탭 -->
+  <div class="page" id="page-dividend">
+    <div class="card">
+      <div class="card-title">고배당 포트폴리오 Top 12</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        총 투자 40% 배정 · 분기/반기 배당 수취
+      </div>
+      <div id="div-list" class="loading">로딩 중...</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">배당 전략 요약</div>
+      <div style="font-size:12px;line-height:1.8;color:var(--muted)">
+        <div>📌 <span style="color:var(--text)">목표 배당수익률</span> — 포트폴리오 연 4~7%</div>
+        <div>📌 <span style="color:var(--text)">배당 재투자</span> — 수령 즉시 동일 섹터 재매수</div>
+        <div>📌 <span style="color:var(--text)">밸류업 프로그램</span> — PBR 1 미만 금융주 집중</div>
+        <div>📌 <span style="color:var(--text)">분기 배당주 우선</span> — 현금흐름 분산</div>
+      </div>
+    </div>
+
+    <div class="card" style="text-align:center">
+      <div class="card-title">전략 상세 페이지</div>
+      <a href="/strategy" style="display:inline-block;margin-top:8px;padding:10px 24px;background:var(--accent2);color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">
+        📋 매매전략 & 포트폴리오 상세 보기
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<!-- 하단 탭바 -->
+<div class="tab-bar">
+  <button class="tab active" onclick="switchTab('asset',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    자산
+  </button>
+  <button class="tab" onclick="switchTab('holdings',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    종목
+  </button>
+  <button class="tab" onclick="switchTab('market',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    시장
+  </button>
+  <button class="tab" onclick="switchTab('dividend',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    배당
+  </button>
+</div>
+
+<button class="refresh-btn" onclick="loadAll()" title="새로고침">↻</button>
+
+<script>
+const API = '';
+let sectorChart = null;
+
+function fmt(n) {
+  if (n == null) return '-';
+  return '₩' + Math.round(n).toLocaleString('ko-KR');
+}
+function fmtPct(n, digits=1) {
+  if (n == null) return '-';
+  const v = (n * 100).toFixed(digits);
+  return (n >= 0 ? '+' : '') + v + '%';
+}
+function fmtPctDirect(n, digits=1) {
+  if (n == null) return '-';
+  return (n >= 0 ? '+' : '') + n.toFixed(digits) + '%';
+}
+function clsP(n) { return n > 0 ? 'pnl-pos' : n < 0 ? 'pnl-neg' : 'pnl-neu'; }
+
+function switchTab(name, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  el.classList.add('active');
+}
+
+async function fetchJSON(url) {
+  try {
+    const r = await fetch(API + url);
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+async function loadMarket() {
+  const d = await fetchJSON('/api/market');
+  if (!d) return;
+
+  const items = [
+    {id:'kospi', key:'kospi', label:'KOSPI'},
+    {id:'kosdaq', key:'kosdaq', label:'KOSDAQ'},
+    {id:'usd', key:'usdkrw', label:'USD'},
+    {id:'sp', key:'sp500', label:'S&P'},
+  ];
+
+  items.forEach(({id, key}) => {
+    const v = d[key];
+    if (!v) return;
+    const price = v.price.toLocaleString('ko-KR', {maximumFractionDigits:2});
+    const chgHtml = v.change_pct != null ? `<span class="${v.change_pct >= 0 ? 'up':'dn'}">${v.change_pct >= 0 ? '+':''}${v.change_pct?.toFixed(2)}%</span>` : '';
+
+    // ticker
+    [`tk-${id}`, `tk-${id}2`].forEach(tid => {
+      const el = document.getElementById(tid);
+      if (el) el.innerHTML = `<span class="${v.change_pct >= 0 ? 'up':'dn'}">${price}</span> ${chgHtml}`;
+    });
+
+    // market page
+    const mel = document.getElementById(`m-${id}`);
+    if (mel) mel.textContent = price;
+    const cEl = document.getElementById(`m-${id}-chg`);
+    if (cEl) cEl.innerHTML = chgHtml;
+  });
+
+  if (d.updated) {
+    document.getElementById('server-time').textContent = '업데이트 ' + d.updated;
+  }
+}
+
+async function loadPortfolio() {
+  const d = await fetchJSON('/api/portfolio');
+  if (!d) return;
+
+  const cap = d.total_capital || 100_000_000;
+  const val = d.total_value || cap;
+  const cash = d.cash || cap;
+  const invested = val - cash;
+  const pnl = (val - cap) / cap;
+
+  document.getElementById('total-value').textContent = fmt(val);
+  document.getElementById('total-pnl').innerHTML = `<span class="${clsP(pnl)}">${fmtPct(pnl)}</span>`;
+  document.getElementById('daily-pnl').innerHTML = `<span class="${clsP(0)}">-</span>`;
+  document.getElementById('month-pnl').innerHTML = `<span class="${clsP(0)}">-</span>`;
+
+  document.getElementById('invested').textContent = fmt(invested);
+  document.getElementById('inv-ratio').textContent = `투자비율 ${(invested/cap*100).toFixed(1)}%`;
+  document.getElementById('cash-val').textContent = fmt(cash);
+  document.getElementById('cash-ratio').textContent = `현금비율 ${(cash/val*100).toFixed(1)}%`;
+
+  const genV = d.general_value || 0;
+  const divV = d.dividend_value || 0;
+  document.getElementById('gen-val').textContent = fmt(genV);
+  document.getElementById('div-val').textContent = fmt(divV);
+  document.getElementById('gen-bar').style.width = cap > 0 ? (genV/cap*100).toFixed(1)+'%' : '0%';
+  document.getElementById('div-bar').style.width = cap > 0 ? (divV/cap*100).toFixed(1)+'%' : '0%';
+
+  // Holdings
+  const holdings = d.holdings || {};
+  const hKeys = Object.keys(holdings);
+  document.getElementById('holdings-count').textContent = hKeys.length;
+
+  if (hKeys.length === 0) {
+    document.getElementById('holdings-list').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📊</div>
+        <div>보유 종목 없음</div>
+        <div style="font-size:11px;margin-top:8px">페이퍼 트레이딩 중 · 매매 시그널 대기</div>
+      </div>`;
+  } else {
+    const sorted = hKeys.sort((a,b) => (holdings[b].pnl_pct||0) - (holdings[a].pnl_pct||0));
+    document.getElementById('holdings-list').innerHTML = sorted.map(code => {
+      const h = holdings[code];
+      const pnl = h.pnl_pct || 0;
+      const pnlAmt = (h.current_price - h.avg_price) * h.quantity;
+      return `
+        <div class="holding-row">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div class="holding-name">${h.name || code}</div>
+              <div class="holding-sub">
+                <span class="badge badge-${h.category==='dividend'?'div':'sector'}">${h.category==='dividend'?'배당':'섹터'}</span>
+                ${h.sector||''} · ${h.quantity}주
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:3px">
+                매수 ${(h.avg_price||0).toLocaleString()}원 → 현재 ${(h.current_price||0).toLocaleString()}원
+              </div>
+            </div>
+            <div class="holding-right">
+              <div class="${clsP(pnl)}" style="font-size:15px;font-weight:700">${fmtPct(pnl)}</div>
+              <div class="${clsP(pnlAmt)}" style="font-size:11px">${pnlAmt >= 0 ? '+' : ''}${Math.round(pnlAmt).toLocaleString()}원</div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // Sector chart
+  buildSectorChart(holdings);
+}
+
+function buildSectorChart(holdings) {
+  const sectorColors = {
+    'AI_반도체': '#3b82f6',
+    'K_방산': '#f59e0b',
+    '재생에너지': '#10b981',
+    '중소_벤처': '#8b5cf6',
+    '피지컬AI_로봇': '#06b6d4',
+    '외교_한중': '#f97316',
+    '밸류업_금융': '#ec4899',
+    '배당': '#4ade80',
+    '현금': '#64748b',
+  };
+
+  const sectorTotals = {'현금': 0};
+  let totalCash = 100_000_000;
+
+  Object.values(holdings).forEach(h => {
+    const sec = h.sector || '기타';
+    if (!sectorTotals[sec]) sectorTotals[sec] = 0;
+    sectorTotals[sec] += (h.current_price || 0) * (h.quantity || 0);
+    totalCash -= (h.avg_price || 0) * (h.quantity || 0);
+  });
+  sectorTotals['현금'] = Math.max(0, totalCash);
+
+  const labels = Object.keys(sectorTotals).filter(k => sectorTotals[k] > 0);
+  const data = labels.map(k => sectorTotals[k]);
+  const colors = labels.map(k => sectorColors[k] || '#94a3b8');
+
+  const ctx = document.getElementById('sector-chart').getContext('2d');
+  if (sectorChart) sectorChart.destroy();
+  sectorChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 10, padding: 8 } }
+      }
+    }
+  });
+}
+
+async function loadSignals() {
+  const signals = await fetchJSON('/api/signals');
+  if (!signals || !signals.length) {
+    document.getElementById('signals-list').innerHTML = '<div class="empty-state"><div>시그널 없음</div></div>';
+    document.getElementById('watchlist-content').innerHTML = '<div class="empty-state"><div>다음 분석 대기 중</div></div>';
+    return;
+  }
+
+  const actionLabel = {BUY:'매수', SELL:'매도', WATCH:'관망', HOLD:'보류'};
+  const sorted = [...signals].sort((a,b) => (b.weighted_score||0) - (a.weighted_score||0));
+
+  document.getElementById('signals-list').innerHTML = sorted.slice(0,8).map(s => {
+    const act = s.action || 'HOLD';
+    const score = Math.min(100, Math.max(0, s.weighted_score||0));
+    return `
+      <div class="signal-row">
+        <div class="signal-dot signal-${act.toLowerCase()}"></div>
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between">
+            <span style="font-weight:600">${s.name} <span style="font-size:10px;color:var(--muted)">${s.code}</span></span>
+            <span class="badge badge-${act==='BUY'?'div':'sector'}">${actionLabel[act]||act}</span>
+          </div>
+          <div class="score-bar"><div class="score-fill" style="width:${score}%;background:${act==='BUY'?'var(--accent)':act==='SELL'?'var(--red)':'var(--yellow)'}"></div></div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">${(s.reasons||[]).slice(0,2).join(' · ')}</div>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:var(--accent)">${score.toFixed(0)}</div>
+      </div>`;
+  }).join('');
+
+  // Watchlist: top BUY/WATCH signals
+  const watchlist = sorted.filter(s => s.action === 'BUY' || s.action === 'WATCH').slice(0, 5);
+  if (watchlist.length === 0) {
+    document.getElementById('watchlist-content').innerHTML = '<div style="color:var(--muted);font-size:12px">현재 매수/관망 시그널 없음</div>';
+  } else {
+    document.getElementById('watchlist-content').innerHTML = watchlist.map(s => `
+      <div class="signal-row">
+        <div class="signal-dot signal-${s.action.toLowerCase()}"></div>
+        <div style="flex:1">
+          <div style="font-weight:600">${s.name} <span style="color:var(--muted);font-size:10px">${s.code}</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${(s.reasons||[]).slice(0,2).join(' · ')}</div>
+        </div>
+        <div style="font-size:11px;color:var(--${s.action==='BUY'?'accent':'yellow'})">${s.action==='BUY'?'매수후보':'관망'}</div>
+      </div>`).join('');
+  }
+}
+
+async function loadDividend() {
+  const uni = await fetchJSON('/api/universe');
+  if (!uni) return;
+
+  const divStocks = uni.dividend || {};
+  const rows = Object.entries(divStocks).sort((a,b) => (b[1].yield_pct||0) - (a[1].yield_pct||0));
+
+  document.getElementById('div-list').innerHTML = rows.map(([code, info]) => {
+    const yld = info.div_yield_live || info.yield_pct;
+    const pbr = info.pbr_live || info.pbr;
+    return `
+      <div class="div-row">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-weight:600">${info.name} <span style="color:var(--muted);font-size:11px">${code}</span></div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px">
+              ${info.freq||''} · PBR ${pbr != null ? pbr.toFixed(2) : '-'}배
+            </div>
+          </div>
+          <div style="text-align:right">
+            <span class="yield-badge">${yld != null ? yld.toFixed(1)+'%' : '-'}</span>
+            <div style="font-size:10px;color:var(--muted);margin-top:4px">
+              DPS ${info.dps ? info.dps.toLocaleString()+'원' : '-'}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function loadStatus() {
+  const d = await fetchJSON('/api/status');
+  if (!d) return;
+
+  document.getElementById('sys-status').innerHTML = `
+    <div class="grid2">
+      <div class="stat-box">
+        <div class="stat-label">봇 상태</div>
+        <div class="stat-value" style="color:var(--accent)">● 가동 중</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">모드</div>
+        <div class="stat-value">${d.paper_trading ? '페이퍼' : '실전'}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">재무데이터</div>
+        <div class="stat-value">${d.funds_stocks}종목</div>
+        <div style="font-size:10px;color:var(--muted)">${d.funds_date}</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">시그널</div>
+        <div class="stat-value">${d.last_signal}개</div>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:right">서버 ${d.server_time}</div>`;
+}
+
+async function loadAll() {
+  await Promise.all([
+    loadMarket(),
+    loadPortfolio(),
+    loadSignals(),
+    loadDividend(),
+    loadStatus(),
+  ]);
+}
+
+// 초기 로드
+loadAll();
+// 30초마다 자동 갱신
+setInterval(loadAll, 30000);
+// 시계
+setInterval(() => {
+  document.getElementById('server-time').textContent = new Date().toLocaleTimeString('ko-KR');
+}, 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>KangSub Bot — 전략 & 포트폴리오</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --card: #111827;
+    --card2: #1a2235;
+    --border: #1e2d45;
+    --accent: #3b82f6;
+    --accent2: #06b6d4;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --purple: #8b5cf6;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px 10px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-top { display: flex; align-items: center; justify-content: space-between; }
+  .header-title { font-size: 15px; font-weight: 700; color: #fff; }
+  .header-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .back-btn {
+    background: var(--border); border: none; color: var(--text2);
+    padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .back-btn:hover { background: var(--accent); color: #fff; }
+
+  /* Tab nav */
+  .tab-nav {
+    display: flex; background: var(--card); border-bottom: 1px solid var(--border);
+    overflow-x: auto; scrollbar-width: none; position: sticky; top: 62px; z-index: 90;
+  }
+  .tab-nav::-webkit-scrollbar { display: none; }
+  .tab-btn {
+    flex: 0 0 auto; padding: 10px 16px; background: none; border: none;
+    color: var(--text3); font-size: 12px; cursor: pointer; white-space: nowrap;
+    border-bottom: 2px solid transparent; transition: all .2s;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Content */
+  .content { padding: 12px; display: none; }
+  .content.active { display: block; }
+
+  /* Cards */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 12px; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .card-title .icon { font-size: 14px; }
+
+  /* Strategy flow */
+  .flow-step {
+    background: var(--card2); border-radius: 8px; padding: 12px; margin-bottom: 8px;
+    border-left: 3px solid var(--accent);
+  }
+  .flow-step.green { border-left-color: var(--green); }
+  .flow-step.red   { border-left-color: var(--red); }
+  .flow-step.yellow{ border-left-color: var(--yellow); }
+  .flow-step.purple{ border-left-color: var(--purple); }
+  .flow-title { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .flow-body  { font-size: 11px; color: var(--text2); line-height: 1.7; }
+  .flow-body code {
+    background: #0f172a; border-radius: 3px; padding: 1px 5px;
+    font-family: 'Courier New', monospace; color: var(--accent2); font-size: 11px;
+  }
+
+  /* Tag badges */
+  .tag {
+    display: inline-block; padding: 2px 7px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; margin: 2px;
+  }
+  .tag-buy    { background: rgba(16,185,129,.15); color: var(--green); }
+  .tag-sell   { background: rgba(239,68,68,.15);  color: var(--red); }
+  .tag-risk   { background: rgba(245,158,11,.15); color: var(--yellow); }
+  .tag-info   { background: rgba(59,130,246,.15); color: var(--accent); }
+  .tag-purple { background: rgba(139,92,246,.15); color: var(--purple); }
+
+  /* Risk matrix */
+  .risk-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+  }
+  .risk-row:last-child { border-bottom: none; }
+  .risk-label { font-size: 11px; color: var(--text2); }
+  .risk-value { font-size: 12px; font-weight: 700; }
+  .risk-val-red    { color: var(--red); }
+  .risk-val-yellow { color: var(--yellow); }
+  .risk-val-green  { color: var(--green); }
+
+  /* Sector cards */
+  .sector-card {
+    background: var(--card2); border-radius: 8px; padding: 12px; margin-bottom: 8px;
+    border: 1px solid var(--border);
+  }
+  .sector-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+  }
+  .sector-name { font-size: 13px; font-weight: 700; }
+  .sector-meta { text-align: right; }
+  .conviction-bar {
+    display: flex; gap: 3px; justify-content: flex-end; margin-bottom: 2px;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border);
+  }
+  .dot.on { background: var(--yellow); }
+  .sector-weight { font-size: 11px; color: var(--accent); font-weight: 700; }
+
+  /* Stock table in sector */
+  .stock-list { display: flex; flex-direction: column; gap: 4px; }
+  .stock-row {
+    display: grid; grid-template-columns: 1fr 60px 60px 60px;
+    gap: 4px; align-items: center;
+    background: #0f172a; border-radius: 5px; padding: 6px 8px;
+  }
+  .stock-name { font-size: 11px; font-weight: 600; }
+  .stock-code { font-size: 9px; color: var(--text3); }
+  .stock-type { font-size: 9px; }
+  .stock-type.leader { color: var(--green); }
+  .stock-type.bonus  { color: var(--yellow); }
+  .stock-num { font-size: 11px; text-align: right; color: var(--text2); }
+
+  /* Upside chip */
+  .upside {
+    background: rgba(16,185,129,.12); color: var(--green);
+    font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+  }
+
+  /* Dividend table */
+  .div-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+  }
+  .div-row:last-child { border-bottom: none; }
+  .div-left { flex: 1; }
+  .div-name { font-size: 12px; font-weight: 600; }
+  .div-code { font-size: 10px; color: var(--text3); }
+  .div-right { text-align: right; min-width: 80px; }
+  .div-yield { font-size: 14px; font-weight: 700; color: var(--green); }
+  .div-dps   { font-size: 10px; color: var(--text3); margin-top: 1px; }
+  .div-badge {
+    font-size: 9px; padding: 1px 5px; border-radius: 3px;
+    background: rgba(6,182,212,.1); color: var(--accent2); margin-top: 2px; display: inline-block;
+  }
+
+  /* Live data refresh */
+  .live-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green); animation: pulse 2s infinite; margin-right: 4px;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 20px; }
+  .timeline::before {
+    content:''; position: absolute; left: 6px; top: 0; bottom: 0;
+    width: 2px; background: var(--border);
+  }
+  .tl-item { position: relative; margin-bottom: 14px; }
+  .tl-item::before {
+    content:''; position: absolute; left: -18px; top: 4px;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent); z-index:1;
+  }
+  .tl-item.green::before { background: var(--green); }
+  .tl-item.red::before   { background: var(--red); }
+  .tl-item.yellow::before{ background: var(--yellow); }
+  .tl-time { font-size: 10px; color: var(--text3); margin-bottom: 2px; }
+  .tl-text { font-size: 12px; color: var(--text); }
+  .tl-sub  { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+  /* Signal badges */
+  .sig-item {
+    background: var(--card2); border-radius: 6px; padding: 10px; margin-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .sig-left .sig-name { font-size: 12px; font-weight: 600; }
+  .sig-left .sig-reason { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .sig-right { text-align: right; }
+  .sig-score { font-size: 18px; font-weight: 800; }
+  .sig-label { font-size: 10px; color: var(--text3); }
+  .sig-type-buy  { color: var(--green); }
+  .sig-type-sell { color: var(--red); }
+  .sig-type-hold { color: var(--text3); }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 30px; color: var(--text3); font-size: 12px; }
+
+  /* Loading spinner */
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
+    display: inline-block; vertical-align: middle; margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Info box */
+  .info-box {
+    background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.2);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 11px; color: var(--text2);
+    line-height: 1.6;
+  }
+  .warn-box {
+    background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 11px; color: var(--yellow);
+    line-height: 1.6;
+  }
+
+  /* Allocation bar */
+  .alloc-row { margin-bottom: 8px; }
+  .alloc-label {
+    display: flex; justify-content: space-between; font-size: 11px;
+    color: var(--text2); margin-bottom: 3px;
+  }
+  .alloc-bar-track {
+    height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;
+  }
+  .alloc-bar-fill {
+    height: 100%; border-radius: 3px; transition: width .5s;
+  }
+
+  .refresh-time { font-size: 10px; color: var(--text3); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="header-title">📋 전략 &amp; 포트폴리오</div>
+      <div class="header-sub">KangSub Bot — 이재명 정부 정책 연계 자동매매</div>
+    </div>
+    <a class="back-btn" href="/">← 홈</a>
+  </div>
+</div>
+
+<!-- Tab Nav -->
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('strategy')">⚙️ 매매전략</button>
+  <button class="tab-btn" onclick="switchTab('sectors')">🗂 7섹터</button>
+  <button class="tab-btn" onclick="switchTab('dividend')">💰 배당</button>
+  <button class="tab-btn" onclick="switchTab('signals')">📡 시그널</button>
+  <button class="tab-btn" onclick="switchTab('risk')">🛡 리스크</button>
+</div>
+
+<!-- ═══════════════ TAB: 매매전략 ═══════════════ -->
+<div id="tab-strategy" class="content active">
+
+  <div class="info-box">
+    <strong>이재명 정부 정책 연계 7섹터 + 고배당 전략</strong><br>
+    총 자본 1억원 · 7개 테마 섹터(80%) + 고배당 포트폴리오(20%) · 완전 자동화
+  </div>
+
+  <!-- 매수 로직 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🟢</span> 매수 진입 로직</div>
+
+    <div class="flow-step green">
+      <div class="flow-title">① 시장 필터 (전제 조건)</div>
+      <div class="flow-body">
+        <span class="tag tag-info">일일 1회</span>
+        코스피 20일 이평선 위 → <code>BULL</code> / 아래 → <code>BEAR</code><br>
+        BEAR 모드: 매수 신호 무시, 기존 보유 손절 기준 강화<br>
+        V-KOSPI 40 초과 시 추가 매수 금지 (공포 구간)
+      </div>
+    </div>
+
+    <div class="flow-step green">
+      <div class="flow-title">② 기술적 신호 (AND 조건)</div>
+      <div class="flow-body">
+        <span class="tag tag-buy">RSI 30~65</span>
+        <span class="tag tag-buy">거래량 > 20일 평균 × 1.3</span>
+        <span class="tag tag-buy">5일선 > 20일선</span><br><br>
+        RSI: <code>14일 기준, 과매수(65↑) 매수 금지</code><br>
+        거래량 급증 = 기관/외국인 유입 신호<br>
+        단기선이 중기선 위 = 추세 확인
+      </div>
+    </div>
+
+    <div class="flow-step green">
+      <div class="flow-title">③ 기본적 분석 필터</div>
+      <div class="flow-body">
+        <span class="tag tag-buy">PER &lt; 40</span>
+        <span class="tag tag-buy">PBR &lt; 10</span>
+        <span class="tag tag-buy">ROE ≥ 8%</span><br><br>
+        yfinance TTM(최근 12개월) 기준 자동 수신<br>
+        7일마다 자동 갱신, pykrx 보조 데이터로 보완
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-title">④ 뉴스 감성 분석</div>
+      <div class="flow-body">
+        <span class="tag tag-info">보조 신호</span>
+        <span class="tag tag-purple">AI 감성 점수</span><br><br>
+        종목명 + 섹터 키워드 뉴스 RSS 수집<br>
+        긍정/부정 키워드 스코어링: <code>-3 ~ +3점</code><br>
+        DART 공시 모니터링 (실적발표·유상증자 감지)
+      </div>
+    </div>
+
+    <div class="flow-step green">
+      <div class="flow-title">⑤ 복합 시그널 스코어</div>
+      <div class="flow-body">
+        <code>score = RSI점수 + 거래량점수 + 추세점수 + 뉴스점수</code><br><br>
+        <span class="tag tag-buy">BUY: score ≥ 2.0</span>
+        <span class="tag tag-sell">SELL: score ≤ -1.5</span>
+        <span class="tag tag-info">HOLD: 그 외</span><br><br>
+        매수 체결: 섹터 목표비중 기준 비례 배분<br>
+        1회 최대 매수 = 총자본 × 0.05 (5%)
+      </div>
+    </div>
+  </div>
+
+  <!-- 매도 로직 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🔴</span> 매도 / 손절 로직</div>
+
+    <div class="flow-step red">
+      <div class="flow-title">① 트레일링 스톱 (개별 종목)</div>
+      <div class="flow-body">
+        수익률 +5% 이상 달성 후 고점 대비 <code>-15%</code> 하락 시 손절<br>
+        수익률 +10% 이상: 고점 대비 <code>-12%</code><br>
+        수익률 +20% 이상: 고점 대비 <code>-10%</code><br><br>
+        <span class="tag tag-risk">익절 보호 우선</span> 상승분 지키며 추세 따라가기
+      </div>
+    </div>
+
+    <div class="flow-step red">
+      <div class="flow-title">② 지수 괴리 손절 (INDEX_STOP_LOSS)</div>
+      <div class="flow-body">
+        종목 등락률 − 코스피 등락률 &lt; <code>-10%p</code> 시 즉시 손절<br>
+        예: 코스피 +2%인데 종목 -8% = 괴리 -10%p → 매도<br><br>
+        <span class="tag tag-risk">섹터 모멘텀 이탈 감지</span>
+      </div>
+    </div>
+
+    <div class="flow-step red">
+      <div class="flow-title">③ 포트폴리오 전체 손절</div>
+      <div class="flow-body">
+        전체 평가금액이 투자원금 대비 <code>-15%</code> 하락 시<br>
+        → 전 종목 즉시 매도 + 텔레그램 긴급 알림<br><br>
+        <span class="tag tag-sell">최대 손실 1,500만원 하드캡</span>
+      </div>
+    </div>
+
+    <div class="flow-step yellow">
+      <div class="flow-title">④ 시그널 반전 매도</div>
+      <div class="flow-body">
+        score ≤ -1.5 이면 보유 종목 분할 매도<br>
+        RSI &gt; 75 (과매수) 진입 시 익절 고려<br>
+        목표가 달성 (upside 상단) 시 50% 분할 매도
+      </div>
+    </div>
+  </div>
+
+  <!-- 실행 스케줄 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">⏰</span> 일일 실행 스케줄 (EC2 자동)</div>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-time">08:30 AM</div>
+        <div class="tl-text">모닝 브리핑</div>
+        <div class="tl-sub">코스피 전일 종가·환율·시장 상태 텔레그램 전송</div>
+      </div>
+      <div class="tl-item green">
+        <div class="tl-time">09:00 AM</div>
+        <div class="tl-text">시장 개장</div>
+        <div class="tl-sub">시장 조건 분석 + 전 종목 기술적 신호 생성</div>
+      </div>
+      <div class="tl-item green">
+        <div class="tl-time">09:05 AM</div>
+        <div class="tl-text">신호 기반 매수 실행</div>
+        <div class="tl-sub">BUY 시그널 종목 섹터 비중 기준 분할 매수</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-time">매 30분</div>
+        <div class="tl-text">손절/익절 모니터링</div>
+        <div class="tl-sub">트레일링 스톱 · 지수 괴리 · 포트폴리오 최대손실 체크</div>
+      </div>
+      <div class="tl-item yellow">
+        <div class="tl-time">02:50 PM</div>
+        <div class="tl-text">오후 리밸런싱</div>
+        <div class="tl-sub">섹터 비중 이탈 시 조정 + SELL 시그널 처리</div>
+      </div>
+      <div class="tl-item red">
+        <div class="tl-time">03:20 PM</div>
+        <div class="tl-text">장 마감 처리</div>
+        <div class="tl-sub">일일 리포트 생성 + 텔레그램 전송 + 데이터 저장</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-time">일요일 08:00</div>
+        <div class="tl-text">재무 데이터 갱신</div>
+        <div class="tl-sub">yfinance PER/PBR/ROE/배당 주간 자동 갱신</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 텔레그램 명령어 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📱</span> 텔레그램 명령어</div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+      <div class="flow-step" style="margin:0; padding:8px;">
+        <div class="flow-title">/status</div>
+        <div class="flow-body">시스템 전체 상태</div>
+      </div>
+      <div class="flow-step" style="margin:0; padding:8px;">
+        <div class="flow-title">/balance</div>
+        <div class="flow-body">계좌 잔고 조회</div>
+      </div>
+      <div class="flow-step" style="margin:0; padding:8px;">
+        <div class="flow-title">/holdings</div>
+        <div class="flow-body">보유 종목 현황</div>
+      </div>
+      <div class="flow-step" style="margin:0; padding:8px;">
+        <div class="flow-title">/signals</div>
+        <div class="flow-body">오늘의 매매 시그널</div>
+      </div>
+      <div class="flow-step yellow" style="margin:0; padding:8px;">
+        <div class="flow-title">/pause</div>
+        <div class="flow-body">자동매매 일시정지</div>
+      </div>
+      <div class="flow-step green" style="margin:0; padding:8px;">
+        <div class="flow-title">/resume</div>
+        <div class="flow-body">자동매매 재개</div>
+      </div>
+      <div class="flow-step" style="margin:0; padding:8px;">
+        <div class="flow-title">/risk</div>
+        <div class="flow-body">리스크 지표 확인</div>
+      </div>
+      <div class="flow-step" style="margin:0; padding:8px;">
+        <div class="flow-title">/sync</div>
+        <div class="flow-body">GitHub 코드 동기화</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /tab-strategy -->
+
+
+<!-- ═══════════════ TAB: 7섹터 ═══════════════ -->
+<div id="tab-sectors" class="content">
+
+  <div class="info-box">
+    총 투자 비중: <strong>80%</strong> (섹터 배분) + 20% 고배당<br>
+    Conviction 5★: AI반도체·K방산 우선 배분
+  </div>
+
+  <!-- 비중 막대 그래프 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📊</span> 목표 자산 배분</div>
+    <div id="alloc-bars">
+      <div class="alloc-row">
+        <div class="alloc-label"><span>AI·반도체</span><span>22%</span></div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:22%; background: #3b82f6;"></div></div>
+      </div>
+      <div class="alloc-row">
+        <div class="alloc-label"><span>K·방산</span><span>20%</span></div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:20%; background: #ef4444;"></div></div>
+      </div>
+      <div class="alloc-row">
+        <div class="alloc-label"><span>재생에너지</span><span>16%</span></div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:16%; background: #10b981;"></div></div>
+      </div>
+      <div class="alloc-row">
+        <div class="alloc-label"><span>피지컬AI·로봇</span><span>14%</span></div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:14%; background: #8b5cf6;"></div></div>
+      </div>
+      <div class="alloc-row">
+        <div class="alloc-label"><span>외교·한중</span><span>12%</span></div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:12%; background: #f59e0b;"></div></div>
+      </div>
+      <div class="alloc-row">
+        <div class="alloc-label"><span>밸류업·금융</span><span>10%</span></div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:10%; background: #06b6d4;"></div></div>
+      </div>
+      <div class="alloc-row">
+        <div class="alloc-label"><span>중소·벤처</span><span>6%</span></div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:6%; background: #f97316;"></div></div>
+      </div>
+      <div class="alloc-row">
+        <div class="alloc-label"><span style="color:var(--green);">고배당</span><span style="color:var(--green);">20%</span></div>
+        <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:20%; background: #10b981;"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 섹터 상세 카드들 -->
+  <div id="sector-cards">
+
+    <!-- AI 반도체 -->
+    <div class="sector-card">
+      <div class="sector-header">
+        <div>
+          <div class="sector-name">🤖 AI·반도체</div>
+          <div style="font-size:10px; color:var(--text3); margin-top:2px;">HBM·AI 데이터센터 수혜</div>
+        </div>
+        <div class="sector-meta">
+          <div class="conviction-bar">
+            <div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot on"></div>
+          </div>
+          <div class="sector-weight">22% 목표</div>
+        </div>
+      </div>
+      <div class="stock-list">
+        <div class="stock-row">
+          <div><div class="stock-name">SK하이닉스</div><div class="stock-code">000660 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>14</div>
+          <div><span class="upside">+35~45%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">한미반도체</div><div class="stock-code">042700 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>22</div>
+          <div><span class="upside">+25~35%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">솔브레인</div><div class="stock-code">357780 · KOSDAQ</div></div>
+          <div><span class="stock-type bonus">보너스</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>13</div>
+          <div><span class="upside">+40~55%</span></div>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--text3); line-height:1.6;">
+        편입 근거: HBM3E 독점 공급(SK하이닉스), DRAM 와이어본딩 장비 독점(한미반도체), 반도체 소재 과점(솔브레인)
+      </div>
+    </div>
+
+    <!-- K방산 -->
+    <div class="sector-card">
+      <div class="sector-header">
+        <div>
+          <div class="sector-name">🛡 K·방산</div>
+          <div style="font-size:10px; color:var(--text3); margin-top:2px;">NATO 확장·유럽 방산 수주 수혜</div>
+        </div>
+        <div class="sector-meta">
+          <div class="conviction-bar">
+            <div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot on"></div>
+          </div>
+          <div class="sector-weight">20% 목표</div>
+        </div>
+      </div>
+      <div class="stock-list">
+        <div class="stock-row">
+          <div><div class="stock-name">한화에어로스페이스</div><div class="stock-code">012450 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>28</div>
+          <div><span class="upside">+20~30%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">현대로템</div><div class="stock-code">064350 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>18</div>
+          <div><span class="upside">+30~40%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">풍산</div><div class="stock-code">103140 · KOSPI</div></div>
+          <div><span class="stock-type bonus">보너스</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>9</div>
+          <div><span class="upside">+50~70%</span></div>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--text3); line-height:1.6;">
+        편입 근거: 폴란드·루마니아·인도 K9·K2 수출 급증, 탄약 수요 폭증(풍산), 우크라이나 재건 기대
+      </div>
+    </div>
+
+    <!-- 재생에너지 -->
+    <div class="sector-card">
+      <div class="sector-header">
+        <div>
+          <div class="sector-name">⚡ 재생에너지</div>
+          <div style="font-size:10px; color:var(--text3); margin-top:2px;">그린뉴딜·전력망 현대화</div>
+        </div>
+        <div class="sector-meta">
+          <div class="conviction-bar">
+            <div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot"></div>
+          </div>
+          <div class="sector-weight">16% 목표</div>
+        </div>
+      </div>
+      <div class="stock-list">
+        <div class="stock-row">
+          <div><div class="stock-name">HD현대일렉트릭</div><div class="stock-code">267260 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>35</div>
+          <div><span class="upside">+20~30%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">씨에스윈드</div><div class="stock-code">112610 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>22</div>
+          <div><span class="upside">+25~35%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">일진전기</div><div class="stock-code">103590 · KOSPI</div></div>
+          <div><span class="stock-type bonus">보너스</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>13</div>
+          <div><span class="upside">+45~65%</span></div>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--text3); line-height:1.6;">
+        편입 근거: 변압기 수출 슈퍼사이클(HD현대일렉트릭), 해상풍력 타워 글로벌 1위(씨에스윈드), 국내 전력케이블(일진전기)
+      </div>
+    </div>
+
+    <!-- 피지컬AI 로봇 -->
+    <div class="sector-card">
+      <div class="sector-header">
+        <div>
+          <div class="sector-name">🦾 피지컬AI·로봇</div>
+          <div style="font-size:10px; color:var(--text3); margin-top:2px;">humanoid 로봇 상용화 선점</div>
+        </div>
+        <div class="sector-meta">
+          <div class="conviction-bar">
+            <div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot"></div>
+          </div>
+          <div class="sector-weight">14% 목표</div>
+        </div>
+      </div>
+      <div class="stock-list">
+        <div class="stock-row">
+          <div><div class="stock-name">두산로보틱스</div><div class="stock-code">454910 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">성장주</div>
+          <div><span class="upside">+30~50%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">레인보우로보틱스</div><div class="stock-code">277810 · KOSDAQ</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">성장주</div>
+          <div><span class="upside">+25~40%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">스맥</div><div class="stock-code">099190 · KOSDAQ</div></div>
+          <div><span class="stock-type bonus">보너스</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>15</div>
+          <div><span class="upside">+35~50%</span></div>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--text3); line-height:1.6;">
+        편입 근거: 협동로봇 국내 1위(두산로보틱스), 삼성전자 지분투자·휴머노이드 핵심(레인보우로보틱스), CNC 부품 공급(스맥)
+      </div>
+    </div>
+
+    <!-- 외교 한중 -->
+    <div class="sector-card">
+      <div class="sector-header">
+        <div>
+          <div class="sector-name">🌏 외교·한중</div>
+          <div style="font-size:10px; color:var(--text3); margin-top:2px;">한중 관계 개선·한한령 해제 기대</div>
+        </div>
+        <div class="sector-meta">
+          <div class="conviction-bar">
+            <div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+          <div class="sector-weight">12% 목표</div>
+        </div>
+      </div>
+      <div class="stock-list">
+        <div class="stock-row">
+          <div><div class="stock-name">아모레퍼시픽</div><div class="stock-code">090430 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>25</div>
+          <div><span class="upside">+25~35%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">크래프톤</div><div class="stock-code">259960 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>16</div>
+          <div><span class="upside">+20~30%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">LG생활건강</div><div class="stock-code">051900 · KOSPI</div></div>
+          <div><span class="stock-type bonus">보너스</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>11</div>
+          <div><span class="upside">+40~60%</span></div>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--text3); line-height:1.6;">
+        편입 근거: 뷰티·게임 중국 시장 재진입 기대, 이재명 정부 한중 관계 개선 정책
+      </div>
+    </div>
+
+    <!-- 밸류업 금융 -->
+    <div class="sector-card">
+      <div class="sector-header">
+        <div>
+          <div class="sector-name">🏦 밸류업·금융</div>
+          <div style="font-size:10px; color:var(--text3); margin-top:2px;">PBR 1배 정책·자사주 소각</div>
+        </div>
+        <div class="sector-meta">
+          <div class="conviction-bar">
+            <div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+          <div class="sector-weight">10% 목표</div>
+        </div>
+      </div>
+      <div class="stock-list">
+        <div class="stock-row">
+          <div><div class="stock-name">KB금융</div><div class="stock-code">105560 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">PBR<br>0.7</div>
+          <div><span class="upside">+20~30%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">신한지주</div><div class="stock-code">055550 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">PBR<br>0.7</div>
+          <div><span class="upside">+20~30%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">하나금융지주</div><div class="stock-code">086790 · KOSPI</div></div>
+          <div><span class="stock-type bonus">보너스</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">PBR<br>0.6</div>
+          <div><span class="upside">+40~60%</span></div>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:11px; color:var(--text3); line-height:1.6;">
+        편입 근거: PBR 0.6~0.7배 초저평가 + 밸류업 프로그램 자사주 소각 + 배당 수익률 4~6%
+      </div>
+    </div>
+
+    <!-- 중소벤처 -->
+    <div class="sector-card">
+      <div class="sector-header">
+        <div>
+          <div class="sector-name">🚀 중소·벤처</div>
+          <div style="font-size:10px; color:var(--text3); margin-top:2px;">정책 수혜 중소기업 집중</div>
+        </div>
+        <div class="sector-meta">
+          <div class="conviction-bar">
+            <div class="dot on"></div><div class="dot on"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+          <div class="sector-weight">6% 목표</div>
+        </div>
+      </div>
+      <div class="stock-list">
+        <div class="stock-row">
+          <div><div class="stock-name">한미반도체</div><div class="stock-code">042700 · KOSPI</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>22</div>
+          <div><span class="upside">+25~35%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">이오테크닉스</div><div class="stock-code">039030 · KOSDAQ</div></div>
+          <div><span class="stock-type leader">주도주</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>20</div>
+          <div><span class="upside">+30~45%</span></div>
+        </div>
+        <div class="stock-row">
+          <div><div class="stock-name">솔브레인</div><div class="stock-code">357780 · KOSDAQ</div></div>
+          <div><span class="stock-type bonus">보너스</span></div>
+          <div class="stock-num" style="color:var(--text3); font-size:10px;">목표 PER<br>13</div>
+          <div><span class="upside">+40~55%</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /sector-cards -->
+</div><!-- /tab-sectors -->
+
+
+<!-- ═══════════════ TAB: 배당 ═══════════════ -->
+<div id="tab-dividend" class="content">
+
+  <div class="info-box">
+    목표 배당 수익률 <strong>5~7%</strong> · 분기배당 우선 · 총자본 20% 배분<br>
+    <span class="live-dot"></span> 실시간 배당수익률은 yfinance 자동 수신
+  </div>
+
+  <!-- 고수익 배당 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🏆</span> 고배당 핵심 5종목</div>
+    <div id="high-yield-list">
+      <div class="div-row">
+        <div class="div-left">
+          <div class="div-name">우리금융지주</div>
+          <div class="div-code">316140 · 분기배당</div>
+          <div class="div-badge">비중 22%</div>
+        </div>
+        <div class="div-right">
+          <div class="div-yield" id="yield-316140">7.0%</div>
+          <div class="div-dps">DPS 1,360원</div>
+        </div>
+      </div>
+      <div class="div-row">
+        <div class="div-left">
+          <div class="div-name">DB손해보험</div>
+          <div class="div-code">005830 · 연1회</div>
+          <div class="div-badge">비중 20%</div>
+        </div>
+        <div class="div-right">
+          <div class="div-yield" id="yield-005830">7.0%</div>
+          <div class="div-dps">DPS 6,800원</div>
+        </div>
+      </div>
+      <div class="div-row">
+        <div class="div-left">
+          <div class="div-name">기업은행</div>
+          <div class="div-code">024110 · 분기(2026~)</div>
+          <div class="div-badge">비중 18%</div>
+        </div>
+        <div class="div-right">
+          <div class="div-yield" id="yield-024110">6.9%</div>
+          <div class="div-dps">DPS 1,065원</div>
+        </div>
+      </div>
+      <div class="div-row">
+        <div class="div-left">
+          <div class="div-name">맥쿼리인프라</div>
+          <div class="div-code">088980 · 반기배당</div>
+          <div class="div-badge">비중 15%</div>
+        </div>
+        <div class="div-right">
+          <div class="div-yield" id="yield-088980">6.7%</div>
+          <div class="div-dps">DPS 760원</div>
+        </div>
+      </div>
+      <div class="div-row">
+        <div class="div-left">
+          <div class="div-name">삼성화재</div>
+          <div class="div-code">000810 · 분기배당</div>
+          <div class="div-badge">비중 13%</div>
+        </div>
+        <div class="div-right">
+          <div class="div-yield" id="yield-000810">4.8%</div>
+          <div class="div-dps">DPS 19,500원</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 섹터 배당 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📈</span> 섹터 배당 보조 종목</div>
+    <div class="div-row">
+      <div class="div-left">
+        <div class="div-name">하나금융지주</div>
+        <div class="div-code">086790 · 분기배당</div>
+      </div>
+      <div class="div-right">
+        <div class="div-yield" id="yield-086790">5.9%</div>
+        <div class="div-dps">DPS 3,600원</div>
+      </div>
+    </div>
+    <div class="div-row">
+      <div class="div-left">
+        <div class="div-name">신한지주</div>
+        <div class="div-code">055550 · 분기배당</div>
+      </div>
+      <div class="div-right">
+        <div class="div-yield" id="yield-055550">4.5%</div>
+        <div class="div-dps">DPS 2,160원</div>
+      </div>
+    </div>
+    <div class="div-row">
+      <div class="div-left">
+        <div class="div-name">KB금융</div>
+        <div class="div-code">105560 · 분기배당</div>
+      </div>
+      <div class="div-right">
+        <div class="div-yield" id="yield-105560">4.0%</div>
+        <div class="div-dps">DPS 3,174원</div>
+      </div>
+    </div>
+    <div class="div-row">
+      <div class="div-left">
+        <div class="div-name">풍산</div>
+        <div class="div-code">103140 · 연1회</div>
+      </div>
+      <div class="div-right">
+        <div class="div-yield" id="yield-103140">2.2%</div>
+        <div class="div-dps">DPS 2,600원</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 배당 전략 -->
+  <div class="card">
+    <div class="card-title"><span class="icon">💡</span> 배당 편입 기준</div>
+    <div class="risk-row">
+      <div class="risk-label">최소 배당 수익률</div>
+      <div class="risk-value risk-val-green">≥ 4.0%</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">PBR 한도</div>
+      <div class="risk-value risk-val-yellow">≤ 1.5배</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">연속 배당 지급</div>
+      <div class="risk-value risk-val-green">5년 이상</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">분기배당 우선</div>
+      <div class="risk-value" style="color:var(--accent);">+가산점</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">밸류업 참여 기업</div>
+      <div class="risk-value" style="color:var(--accent);">+가산점</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">총 배당 비중 한도</div>
+      <div class="risk-value risk-val-yellow">20%</div>
+    </div>
+  </div>
+
+  <div class="refresh-time" id="div-refresh-time" style="padding:0 4px 8px;"></div>
+
+</div><!-- /tab-dividend -->
+
+
+<!-- ═══════════════ TAB: 시그널 ═══════════════ -->
+<div id="tab-signals" class="content">
+  <div class="info-box">
+    <span class="live-dot"></span> 오늘의 매매 시그널 (30초 자동갱신)
+  </div>
+  <div id="signals-container">
+    <div class="empty"><span class="spinner"></span>시그널 로딩 중...</div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ TAB: 리스크 ═══════════════ -->
+<div id="tab-risk" class="content">
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🛡</span> 리스크 한도 설정</div>
+    <div class="risk-row">
+      <div class="risk-label">포트폴리오 최대 손실</div>
+      <div class="risk-value risk-val-red">-15% (1,500만원)</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">개별 종목 최대 비중</div>
+      <div class="risk-value risk-val-yellow">15%</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">1회 매수 한도</div>
+      <div class="risk-value risk-val-yellow">5% (500만원)</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">트레일링 스톱 (+5% 후)</div>
+      <div class="risk-value risk-val-red">고점 -15%</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">트레일링 스톱 (+10% 후)</div>
+      <div class="risk-value risk-val-red">고점 -12%</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">트레일링 스톱 (+20% 후)</div>
+      <div class="risk-value risk-val-red">고점 -10%</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">지수 괴리 손절</div>
+      <div class="risk-value risk-val-red">종목-코스피 &lt; -10%p</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">V-KOSPI 매수 금지</div>
+      <div class="risk-value risk-val-red">40 초과 시</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-label">BEAR 모드 판정</div>
+      <div class="risk-value risk-val-yellow">코스피 20MA 하회</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">📊</span> 현재 리스크 상태</div>
+    <div id="risk-live">
+      <div class="empty"><span class="spinner"></span>데이터 로딩 중...</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">🚨</span> 알림 채널</div>
+    <div class="flow-body" style="line-height:2;">
+      <span class="tag tag-risk">매수 체결</span> 텔레그램 즉시 알림<br>
+      <span class="tag tag-sell">손절 발생</span> 텔레그램 긴급 알림<br>
+      <span class="tag tag-info">일일 리포트</span> 오후 3:20 텔레그램<br>
+      <span class="tag tag-info">모닝 브리핑</span> 오전 8:30 텔레그램<br>
+      <span class="tag tag-purple">Notion 로그</span> 매매 기록 자동 저장
+    </div>
+  </div>
+
+</div><!-- /tab-risk -->
+
+
+<script>
+// ── Tab switching ────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+  if (id === 'signals') loadSignals();
+  if (id === 'risk') loadRisk();
+  if (id === 'dividend') loadDividend();
+}
+
+// ── API base ──────────────────────────────────────
+const BASE = window.location.origin;
+
+// ── Signals ───────────────────────────────────────
+async function loadSignals() {
+  try {
+    const res = await fetch(BASE + '/api/signals');
+    const data = await res.json();
+    const el = document.getElementById('signals-container');
+    if (!data || data.length === 0) {
+      el.innerHTML = '<div class="empty">오늘 시그널 없음 (장 마감 또는 대기 중)</div>';
+      return;
+    }
+    // Sort by score desc
+    const sorted = [...data].sort((a,b) => (b.score||0) - (a.score||0));
+    el.innerHTML = sorted.map(s => {
+      const typeClass = s.signal === 'BUY' ? 'sig-type-buy' : s.signal === 'SELL' ? 'sig-type-sell' : 'sig-type-hold';
+      const score = typeof s.score === 'number' ? s.score.toFixed(1) : '-';
+      return `
+        <div class="sig-item">
+          <div class="sig-left">
+            <div class="sig-name">${s.name || s.code}</div>
+            <div class="sig-reason">${s.reason || s.code || '-'}</div>
+          </div>
+          <div class="sig-right">
+            <div class="sig-score ${typeClass}">${score}</div>
+            <div class="sig-label">${s.signal || 'HOLD'}</div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('signals-container').innerHTML = '<div class="empty">API 연결 실패</div>';
+  }
+}
+
+// ── Risk live data ────────────────────────────────
+async function loadRisk() {
+  try {
+    const [portRes, mktRes] = await Promise.all([
+      fetch(BASE + '/api/portfolio'),
+      fetch(BASE + '/api/status'),
+    ]);
+    const port = await portRes.json();
+    const status = await mktRes.json();
+
+    const pnl = port.total_pnl || 0;
+    const pnlClass = pnl >= 0 ? 'risk-val-green' : pnl < -0.1 ? 'risk-val-red' : 'risk-val-yellow';
+
+    document.getElementById('risk-live').innerHTML = `
+      <div class="risk-row">
+        <div class="risk-label">현재 손익률</div>
+        <div class="risk-value ${pnlClass}">${(pnl*100).toFixed(2)}%</div>
+      </div>
+      <div class="risk-row">
+        <div class="risk-label">현금 비중</div>
+        <div class="risk-value risk-val-green">
+          ${port.total_value ? ((port.cash/port.total_value)*100).toFixed(1) : '-'}%
+        </div>
+      </div>
+      <div class="risk-row">
+        <div class="risk-label">보유 종목 수</div>
+        <div class="risk-value">${port.num_holdings || 0}개</div>
+      </div>
+      <div class="risk-row">
+        <div class="risk-label">시스템 상태</div>
+        <div class="risk-value risk-val-green">${status.bot_running ? '🟢 운영 중' : '🔴 정지'}</div>
+      </div>
+      <div class="risk-row">
+        <div class="risk-label">서버 시각</div>
+        <div class="risk-value" style="color:var(--text2); font-size:11px;">${status.server_time || '-'}</div>
+      </div>
+    `;
+  } catch(e) {
+    document.getElementById('risk-live').innerHTML = '<div class="empty">API 연결 실패</div>';
+  }
+}
+
+// ── Dividend live yield ───────────────────────────
+async function loadDividend() {
+  try {
+    const res = await fetch(BASE + '/api/universe');
+    const data = await res.json();
+    const divData = data.dividend || {};
+    Object.entries(divData).forEach(([code, info]) => {
+      const el = document.getElementById('yield-' + code);
+      if (el && info.div_yield_live != null) {
+        el.textContent = info.div_yield_live.toFixed(1) + '%';
+      }
+    });
+    document.getElementById('div-refresh-time').textContent =
+      '업데이트: ' + new Date().toLocaleTimeString('ko-KR');
+  } catch(e) { /* 실패 시 기본값 유지 */ }
+}
+
+// ── Auto refresh ──────────────────────────────────
+setInterval(() => {
+  const activeTab = document.querySelector('.content.active');
+  if (!activeTab) return;
+  const id = activeTab.id.replace('tab-', '');
+  if (id === 'signals') loadSignals();
+  if (id === 'risk') loadRisk();
+  if (id === 'dividend') loadDividend();
+}, 30000);
+
+// Initial load for visible tab
+loadDividend();
+</script>
+</body>
+</html>
