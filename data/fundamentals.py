@@ -25,17 +25,19 @@ except ImportError:
 _CACHE_PATH = Path(__file__).parent.parent / "data" / "fundamentals.json"
 _STALE_DAYS = 7
 
-# pykrx 컬럼명 매핑 — 버전에 따라 영문/한글 혼재
-_PYKRX_COL_MAP = {
-    "per":  ["PER", "주가수익비율", "per"],
-    "pbr":  ["PBR", "주가순자산비율", "pbr"],
-    "eps":  ["EPS", "주당순이익", "eps"],
-    "bps":  ["BPS", "주당순자산가치", "bps"],
-    "div":  ["DIV", "배당수익률", "div"],
-    "dps":  ["DPS", "주당배당금", "dps"],
+# pykrx 컬럼명 후보 매핑 (버전별 영문/한글 혼재 대응)
+_COL_MAP = {
+    "per": ["PER", "주가수익비율", "per"],
+    "pbr": ["PBR", "주가순자산비율", "pbr"],
+    "eps": ["EPS", "주당순이익", "eps"],
+    "bps": ["BPS", "주당순자산가치", "bps"],
+    "div": ["DIV", "배당수익률", "div"],
 }
 
 
+# ──────────────────────────────────────────
+# 캐시 유틸
+# ──────────────────────────────────────────
 def _load_cache() -> dict:
     if _CACHE_PATH.exists():
         try:
@@ -59,49 +61,135 @@ def _is_stale(updated_at: str) -> bool:
         return True
 
 
-def _safe_float(series_or_val, *col_candidates) -> float | None:
-    """Series 또는 dict에서 후보 컬럼명을 순서대로 시도해 float 반환"""
-    if col_candidates:
-        for col in col_candidates:
-            try:
-                val = series_or_val[col]
-                v = float(val)
-                return v if v != 0 else None
-            except Exception:
-                continue
+# ──────────────────────────────────────────
+# 헬퍼
+# ──────────────────────────────────────────
+def _safe_float(row, *candidates):
+    """Series/dict에서 후보 키를 순서대로 시도해 0이 아닌 float 반환"""
+    for key in candidates:
+        try:
+            v = float(row[key])
+            if v != 0:
+                return v
+        except Exception:
+            continue
+    return None
+
+
+def _row_to_fund(row) -> dict:
+    """pykrx DataFrame row -> 재무 dict"""
+    per = _safe_float(row, *_COL_MAP["per"])
+    pbr = _safe_float(row, *_COL_MAP["pbr"])
+    eps = _safe_float(row, *_COL_MAP["eps"])
+    bps = _safe_float(row, *_COL_MAP["bps"])
+    div = _safe_float(row, *_COL_MAP["div"])
+    roe = round(eps / bps * 100, 2) if (eps and bps) else None
+    return {"per": per, "pbr": pbr, "roe": roe, "eps": eps, "div_yield": div}
+
+
+# ──────────────────────────────────────────
+# pykrx — get_market_fundamental_by_date 사용
+# (get_market_fundamental_by_ticker 는 내부 버그로 사용 안 함)
+# ──────────────────────────────────────────
+def _fetch_pykrx(code: str) -> dict | None:
+    if not krx:
         return None
-    # 직접 값
+    padded = code.zfill(6)
+    end = datetime.now().strftime("%Y%m%d")
+    start = (datetime.now() - timedelta(days=20)).strftime("%Y%m%d")
+
     try:
-        v = float(series_or_val)
-        return v if v != 0 else None
-    except Exception:
+        df = krx.get_market_fundamental_by_date(start, end, padded)
+        if df is None or df.empty:
+            log.debug(f"pykrx by_date: 데이터 없음 ({padded})")
+            return None
+
+        log.debug(f"pykrx by_date 컬럼: {list(df.columns)}")
+        row = df.iloc[-1]
+        data = _row_to_fund(row)
+
+        if not any(v for v in data.values() if v):
+            log.debug(f"pykrx by_date: 모든 값 None ({padded})")
+            return None
+
+        as_of = str(df.index[-1])[:10].replace("-", "")
+        data.update({
+            "source": "pykrx",
+            "as_of": as_of,
+            "updated_at": datetime.now().isoformat(),
+        })
+        log.debug(f"pykrx 성공 {padded}: PER={data['per']}, PBR={data['pbr']}")
+        return data
+
+    except Exception as e:
+        log.debug(f"pykrx by_date 실패 ({code}): {e}")
         return None
+
+
+# ──────────────────────────────────────────
+# yfinance — PBR은 balance_sheet에서 직접 계산
+# ──────────────────────────────────────────
+def _calc_pbr(t, info: dict) -> float | None:
+    """
+    PBR = 현재가 / BPS
+    BPS = Common Stock Equity / sharesOutstanding
+    balance_sheet.index 에 'Common Stock Equity' 또는 'Stockholders Equity' 존재 확인됨
+    """
+    price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
+    if not price:
+        return None
+    shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")
+    if not shares:
+        return None
+
+    # balance_sheet에서 자본 항목 탐색 (index = 재무항목명, columns = 날짜)
+    try:
+        bs = t.balance_sheet
+        if bs is not None and not bs.empty:
+            equity_keys = [
+                "Common Stock Equity",
+                "Stockholders Equity",
+                "Total Stockholder Equity",
+                "Total Equity Gross Minority Interest",
+                "Tangible Book Value",
+            ]
+            for item in bs.index:
+                for key in equity_keys:
+                    if key.lower() == str(item).lower():
+                        equity = float(bs.loc[item].iloc[0])
+                        if equity > 0:
+                            bps = equity / shares
+                            pbr = round(price / bps, 2)
+                            log.debug(f"PBR 계산: {price:.0f} / ({equity:.0f}/{shares:.0f}) = {pbr}")
+                            return pbr
+    except Exception as e:
+        log.debug(f"PBR balance_sheet 계산 실패: {e}")
+
+    # bookValue 직접 시도
+    bv = info.get("bookValue")
+    if bv and bv > 0:
+        return round(price / bv, 2)
+
+    return None
 
 
 def _fetch_yfinance(code: str) -> dict | None:
-    """yfinance .info로 PER/ROE/배당수익률/PBR 조회 (한국 종목: code.KS)"""
     if not yf:
         return None
     try:
-        ticker_sym = f"{code.zfill(6)}.KS"
-        t = yf.Ticker(ticker_sym)
+        t = yf.Ticker(f"{code.zfill(6)}.KS")
         info = t.info or {}
 
-        # 시세 확인 — 기본 데이터 없으면 종료
-        if not info.get("regularMarketPrice") and not info.get("currentPrice"):
+        if not info.get("currentPrice") and not info.get("regularMarketPrice"):
             return None
 
         per = info.get("trailingPE") or info.get("forwardPE")
-        pbr = info.get("priceToBook")
+        pbr = info.get("priceToBook") or _calc_pbr(t, info)
         roe_raw = info.get("returnOnEquity")
         roe = round(roe_raw * 100, 2) if roe_raw else None
         div_raw = info.get("dividendYield")
         div = round(div_raw * 100, 2) if div_raw else None
         eps = info.get("trailingEps")
-
-        # PBR 보조 계산 — priceToBook이 None이면 직접 계산
-        if pbr is None:
-            pbr = _calc_pbr_from_balance(t, info)
 
         return {
             "per": round(per, 2) if per else None,
@@ -114,203 +202,33 @@ def _fetch_yfinance(code: str) -> dict | None:
             "updated_at": datetime.now().isoformat(),
         }
     except Exception as e:
-        log.debug(f"yfinance 재무 조회 실패 ({code}): {e}")
+        log.debug(f"yfinance 실패 ({code}): {e}")
         return None
 
 
-def _calc_pbr_from_balance(ticker_obj, info: dict) -> float | None:
-    """
-    대차대조표에서 PBR 직접 계산
-    PBR = 현재가 / BPS(주당순자산)
-        = 현재가 / (총자본 / 발행주식수)
-    """
-    try:
-        price = (info.get("currentPrice")
-                 or info.get("regularMarketPrice")
-                 or info.get("previousClose"))
-        if not price:
-            return None
-
-        shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")
-        if not shares:
-            return None
-
-        # balance_sheet에서 총자본 시도
-        bs = ticker_obj.balance_sheet
-        if bs is not None and not bs.empty:
-            equity_keys = [
-                "Stockholders Equity",
-                "Total Stockholder Equity",
-                "Total Equity",
-                "Common Stock Equity",
-                "Total Stockholders Equity",
-            ]
-            for col in bs.index:
-                for key in equity_keys:
-                    if key.lower() in str(col).lower():
-                        equity = float(bs.loc[col].iloc[0])
-                        if equity > 0:
-                            bps = equity / shares
-                            pbr = price / bps
-                            log.debug(f"PBR 대차대조표 계산: {price:.0f}/{bps:.0f}={pbr:.2f}")
-                            return round(pbr, 2)
-
-        # fast_info 시도
-        try:
-            fi = ticker_obj.fast_info
-            bv = getattr(fi, "book_value", None)
-            if bv and bv > 0:
-                return round(price / bv, 2)
-        except Exception:
-            pass
-
-        # bookValue 필드 재시도
-        bv2 = info.get("bookValue")
-        if bv2 and bv2 > 0:
-            return round(price / bv2, 2)
-
-    except Exception as e:
-        log.debug(f"PBR 대차대조표 계산 실패: {e}")
-    return None
-
-
-def _get_pykrx_df(date_str: str):
-    """
-    pykrx get_market_fundamental_by_ticker 시도 — KOSPI/KOSDAQ 순서로
-    반환: (DataFrame, 실제_컬럼_dict) or (None, None)
-    """
-    for market in ("KOSPI", "KOSDAQ"):
-        try:
-            df = krx.get_market_fundamental_by_ticker(date_str, market=market)
-        except TypeError:
-            # 일부 구버전은 market 파라미터 없음
-            try:
-                df = krx.get_market_fundamental_by_ticker(date_str)
-            except Exception:
-                return None, None
-        except Exception:
-            return None, None
-
-        if df is None or df.empty:
-            continue
-
-        # 실제 컬럼 로그 (최초 1회)
-        log.debug(f"pykrx({market}) 컬럼: {list(df.columns)} | 인덱스명: {df.index.name}")
-        return df, market
-
-    return None, None
-
-
-def _extract_pykrx_row(row) -> dict:
-    """Series row에서 컬럼명 후보를 시도해 재무 데이터 추출"""
-    cols = list(row.index)
-    log.debug(f"pykrx row 컬럼: {cols}")
-
-    per = _safe_float(row, *_PYKRX_COL_MAP["per"])
-    pbr = _safe_float(row, *_PYKRX_COL_MAP["pbr"])
-    eps = _safe_float(row, *_PYKRX_COL_MAP["eps"])
-    bps = _safe_float(row, *_PYKRX_COL_MAP["bps"])
-    div = _safe_float(row, *_PYKRX_COL_MAP["div"])
-    roe = round(eps / bps * 100, 2) if (eps and bps) else None
-
-    return {"per": per, "pbr": pbr, "roe": roe, "eps": eps, "div_yield": div}
-
-
-def _fetch_pykrx(code: str) -> dict | None:
-    """pykrx로 PER/PBR/배당수익률 조회 (보조 소스) — 컬럼명 자동 탐지"""
-    if not krx:
-        return None
-
-    padded = code.zfill(6)
-
-    # 최근 5 영업일 순서로 시도 (주말/공휴일 대비)
-    for days_back in range(0, 7):
-        dt = (datetime.now() - timedelta(days=days_back))
-        if dt.weekday() >= 5:   # 주말 건너뜀
-            continue
-        date_str = dt.strftime("%Y%m%d")
-
-        df, market = _get_pykrx_df(date_str)
-        if df is None:
-            continue
-
-        if padded not in df.index:
-            log.debug(f"pykrx: {padded} not in index ({date_str}, {market})")
-            # 첫 번째로 데이터가 있는 날짜라면 인덱스 샘플 로그
-            log.debug(f"  index 샘플: {list(df.index[:5])}")
-            continue
-
-        row = df.loc[padded]
-        data = _extract_pykrx_row(row)
-
-        if not any(data.values()):
-            log.debug(f"pykrx 데이터 모두 None: {padded} ({date_str})")
-            continue
-
-        data.update({
-            "source": f"pykrx({market})",
-            "as_of": date_str,
-            "updated_at": datetime.now().isoformat(),
-        })
-        log.debug(f"pykrx 성공 {padded} [{date_str}/{market}]: {data}")
-        return data
-
-    # 개별 종목 by_date 폴백
-    return _fetch_pykrx_by_date(code)
-
-
-def _fetch_pykrx_by_date(code: str) -> dict | None:
-    """pykrx get_market_fundamental_by_date 로 개별 종목 조회 (폴백)"""
-    if not krx:
-        return None
-    padded = code.zfill(6)
-    end = datetime.now().strftime("%Y%m%d")
-    start = (datetime.now() - timedelta(days=14)).strftime("%Y%m%d")
-    try:
-        df = krx.get_market_fundamental_by_date(start, end, padded)
-        if df is None or df.empty:
-            return None
-        log.debug(f"pykrx by_date 컬럼: {list(df.columns)}")
-        row = df.iloc[-1]   # 가장 최근 행
-        data = _extract_pykrx_row(row)
-        if not any(data.values()):
-            return None
-        as_of = str(df.index[-1])[:10].replace("-", "")
-        data.update({
-            "source": "pykrx(by_date)",
-            "as_of": as_of,
-            "updated_at": datetime.now().isoformat(),
-        })
-        log.debug(f"pykrx by_date 성공 {padded}: {data}")
-        return data
-    except Exception as e:
-        log.debug(f"pykrx by_date 실패 ({code}): {e}")
-    return None
-
-
+# ──────────────────────────────────────────
+# 공개 API
+# ──────────────────────────────────────────
 def fetch_fundamentals(code: str) -> dict | None:
-    """yfinance 우선 → pykrx 폴백으로 재무 데이터 조회"""
+    """yfinance 우선 → pykrx 폴백"""
     result = _fetch_yfinance(code)
     if result:
-        # PBR이 여전히 None이면 pykrx 보조 시도
-        if result.get("pbr") is None:
-            pykrx_data = _fetch_pykrx(code)
-            if pykrx_data and pykrx_data.get("pbr"):
-                result["pbr"] = pykrx_data["pbr"]
-                result["source"] = "yfinance+pykrx"
-        # PER도 None이면 pykrx에서 보충
-        if result.get("per") is None:
-            pykrx_data = _fetch_pykrx(code) if result.get("pbr") is not None else None
-            if pykrx_data and pykrx_data.get("per"):
-                result["per"] = pykrx_data["per"]
+        # PBR 또는 PER가 None이면 pykrx 보충
+        if result.get("pbr") is None or result.get("per") is None:
+            pk = _fetch_pykrx(code)
+            if pk:
+                if result.get("pbr") is None and pk.get("pbr"):
+                    result["pbr"] = pk["pbr"]
+                    result["source"] = "yfinance+pykrx"
+                if result.get("per") is None and pk.get("per"):
+                    result["per"] = pk["per"]
+                    result["source"] = result.get("source", "yfinance+pykrx")
         return result
 
-    # yfinance 실패 시 pykrx로 폴백
     return _fetch_pykrx(code)
 
 
 def get_fundamentals(code: str, force_refresh: bool = False) -> dict | None:
-    """캐시 확인 → 7일 경과 시 자동 갱신"""
     cache = _load_cache()
     entry = cache.get(code)
 
@@ -330,7 +248,6 @@ def get_fundamentals(code: str, force_refresh: bool = False) -> dict | None:
 
 
 def refresh_all(codes: list) -> dict:
-    """전체 유니버스 재무 데이터 일괄 갱신 (매주 월요일 자동 호출)"""
     log.info(f"전체 재무 데이터 갱신 시작 ({len(codes)}종목)")
     results = {}
     failed = []
@@ -367,23 +284,22 @@ def is_cache_fresh() -> bool:
 
 def get_per(code: str) -> float | None:
     d = get_fundamentals(code)
-    return d["per"] if d else None
+    return d.get("per") if d else None
 
 def get_pbr(code: str) -> float | None:
     d = get_fundamentals(code)
-    return d["pbr"] if d else None
+    return d.get("pbr") if d else None
 
 def get_roe(code: str) -> float | None:
     d = get_fundamentals(code)
-    return d["roe"] if d else None
+    return d.get("roe") if d else None
 
 def get_div_yield(code: str) -> float | None:
     d = get_fundamentals(code)
-    return d["div_yield"] if d else None
+    return d.get("div_yield") if d else None
 
 
 def print_summary():
-    """캐시된 재무 데이터 요약 출력"""
     cache = _load_cache()
     if not cache:
         print("캐시 없음 — refresh_all() 먼저 실행하세요.")
@@ -392,11 +308,11 @@ def print_summary():
     print(f"{'종목코드':<10} {'PER':>7} {'PBR':>7} {'ROE%':>7} {'배당%':>7} {'기준일':<12} 출처")
     print(f"{'-'*75}")
     for code, d in sorted(cache.items()):
-        per = f"{d['per']:.1f}" if d.get('per') else "-"
-        pbr = f"{d['pbr']:.2f}" if d.get('pbr') else "-"
-        roe = f"{d['roe']:.1f}" if d.get('roe') else "-"
-        div = f"{d['div_yield']:.1f}" if d.get('div_yield') else "-"
-        src = d.get('source', '')[:14]
+        per = f"{d['per']:.1f}" if d.get("per") else "-"
+        pbr = f"{d['pbr']:.2f}" if d.get("pbr") else "-"
+        roe = f"{d['roe']:.1f}" if d.get("roe") else "-"
+        div = f"{d['div_yield']:.1f}" if d.get("div_yield") else "-"
+        src = d.get("source", "")[:14]
         print(f"{code:<10} {per:>7} {pbr:>7} {roe:>7} {div:>7} {d.get('as_of',''):<12} {src}")
     print(f"{'='*75}")
     sample = next(iter(cache.values()))
@@ -405,39 +321,45 @@ def print_summary():
 
 def diagnose():
     """pykrx/yfinance 진단 — EC2에서 직접 실행용"""
-    print("\n=== pykrx 진단 ===")
+    print("\n=== pykrx 진단 (get_market_fundamental_by_date) ===")
     if krx:
-        from datetime import datetime, timedelta
-        for days_back in range(0, 7):
-            dt = datetime.now() - timedelta(days=days_back)
-            if dt.weekday() >= 5:
-                continue
-            date_str = dt.strftime("%Y%m%d")
+        end = datetime.now().strftime("%Y%m%d")
+        start = (datetime.now() - timedelta(days=14)).strftime("%Y%m%d")
+        for ticker in ["005930", "000660"]:
             try:
-                df = krx.get_market_fundamental_by_ticker(date_str)
+                df = krx.get_market_fundamental_by_date(start, end, ticker)
                 if df is not None and not df.empty:
-                    print(f"기준일: {date_str}")
-                    print(f"컬럼: {list(df.columns)}")
-                    print(f"인덱스명: {df.index.name}")
-                    print(f"인덱스 샘플: {list(df.index[:5])}")
-                    # 삼성전자 조회
-                    if "005930" in df.index:
-                        print(f"삼성전자(005930):\n{df.loc['005930']}")
-                    break
+                    print(f"[{ticker}] OK - 기준일: {df.index[-1]}")
+                    print(f"  컬럼: {list(df.columns)}")
+                    print(f"  최신값:\n{df.iloc[-1]}")
+                else:
+                    print(f"[{ticker}] 데이터 없음")
             except Exception as e:
-                print(f"{date_str} 오류: {e}")
+                print(f"[{ticker}] 오류: {e}")
     else:
         print("pykrx 미설치")
 
-    print("\n=== yfinance 진단 (SK하이닉스 000660) ===")
+    print("\n=== yfinance PBR 계산 진단 (SK하이닉스 000660) ===")
     if yf:
         t = yf.Ticker("000660.KS")
         info = t.info or {}
-        keys = ["regularMarketPrice", "currentPrice", "trailingPE", "forwardPE",
-                "priceToBook", "bookValue", "returnOnEquity", "dividendYield",
-                "trailingEps", "sharesOutstanding"]
-        for k in keys:
-            print(f"  {k}: {info.get(k)}")
-        print(f"\n  balance_sheet columns: {list(t.balance_sheet.index) if not t.balance_sheet.empty else 'empty'}")
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        shares = info.get("sharesOutstanding")
+        print(f"  현재가: {price}")
+        print(f"  발행주식수: {shares}")
+        print(f"  priceToBook(직접): {info.get('priceToBook')}")
+        pbr = _calc_pbr(t, info)
+        print(f"  PBR(계산값): {pbr}")
+        print(f"  ROE: {info.get('returnOnEquity')}")
+        print(f"  배당수익률: {info.get('dividendYield')}")
+
+    print("\n=== 전체 조회 테스트 (삼성전자 005930) ===")
+    result = fetch_fundamentals("005930")
+    if result:
+        print(f"  PER: {result.get('per')}")
+        print(f"  PBR: {result.get('pbr')}")
+        print(f"  ROE: {result.get('roe')}%")
+        print(f"  배당: {result.get('div_yield')}%")
+        print(f"  출처: {result.get('source')}")
     else:
-        print("yfinance 미설치")
+        print("  삼성전자 조회 실패")
