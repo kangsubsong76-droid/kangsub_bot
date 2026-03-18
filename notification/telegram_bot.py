@@ -206,3 +206,30 @@ class TelegramCommandBot:
             self.build()
         log.info("텔레그램 봇 시작")
         self.app.run_polling()
+
+    def run_in_thread(self):
+        """
+        서브 스레드에서 안전하게 실행 — run_polling() 대신
+        저수준 API 사용 (시그널 핸들러 없음)
+        """
+        import asyncio
+
+        if self.app is None:
+            self.build()
+
+        async def _polling():
+            async with self.app:
+                await self.app.start()
+                await self.app.updater.start_polling(drop_pending_updates=True)
+                log.info("텔레그램 명령 봇 폴링 시작")
+                # 봇이 종료될 때까지 대기
+                await asyncio.Event().wait()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(_polling())
+        except Exception as e:
+            log.error(f"텔레그램 명령 봇 오류: {e}")
+        finally:
+            loop.close()

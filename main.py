@@ -428,7 +428,7 @@ if __name__ == "__main__":
     import threading
     def run_cmd_bot():
         try:
-            engine.cmd_bot.build().run()
+            engine.cmd_bot.run_in_thread()
         except Exception as e:
             log.error(f"텔레그램 명령 봇 오류: {e}")
 
