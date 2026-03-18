@@ -35,6 +35,7 @@ from data.market_data import (
     get_stock_ohlcv, get_kospi_ohlcv, get_usdkrw,
     get_vkospi, get_daily_change, get_kospi_daily_change,
 )
+from data.fundamentals import refresh_all as refresh_fundamentals_data, get_fundamentals, is_cache_fresh
 
 from notification.telegram_bot import TelegramNotifier
 from notification.notion_logger import NotionLogger
@@ -73,6 +74,11 @@ class MainEngine:
         self._cached_signals = []
 
         log.info("모든 모듈 초기화 완료")
+
+        # 재무 데이터 캐시가 없거나 오래됐으면 즉시 갱신
+        if not is_cache_fresh():
+            log.info("재무 데이터 캐시 없음 또는 오래됨 — 즉시 갱신")
+            self.refresh_fundamentals()
 
     # ── 스케줄 작업 ──
 
@@ -276,6 +282,23 @@ class MainEngine:
     def check_global_market(self):
         log.info("[22:00] 글로벌 시장 체크")
 
+    def refresh_fundamentals(self):
+        """매주 월요일 — PER/PBR/ROE 실시간 갱신 (pykrx KRX 공식 데이터)"""
+        log.info("[주간] 재무 데이터 갱신 시작 (PER/PBR/ROE)")
+        codes = list(get_unique_codes())
+        results = refresh_fundamentals_data(codes)
+        msg = (
+            f"📊 <b>재무 데이터 갱신 완료</b>\n"
+            f"갱신: {len(results)}종목\n"
+            f"기준일: {datetime.now():%Y-%m-%d}\n"
+        )
+        # 주요 종목 PER/PBR 요약
+        for code in list(results.keys())[:5]:
+            d = results[code]
+            msg += f"• {get_unique_codes() and code}: PER {d.get('per') or '-'}, PBR {d.get('pbr') or '-'}\n"
+        asyncio.run(self.notifier.send(msg))
+        log.info(f"재무 데이터 갱신 완료: {len(results)}종목")
+
     def weekly_report(self):
         log.info("주간 리포트 생성")
 
@@ -339,6 +362,13 @@ class MainEngine:
                 continue
             from config.universe import get_stock_name
             ts = tech_analyze(ohlcv, code, get_stock_name(code))
+            # 실시간 PER/PBR/ROE 주입 (캐시 7일 이내)
+            funda = get_fundamentals(code)
+            if funda:
+                ts.per = funda.get("per")
+                ts.pbr = funda.get("pbr")
+                ts.roe = funda.get("roe")
+                ts.div_yield = funda.get("div_yield")
             tech_signals.append(ts)
 
         return self.signal_engine.generate_batch_signals(tech_signals, market, news_scores)

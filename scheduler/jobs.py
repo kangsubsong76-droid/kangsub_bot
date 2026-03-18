@@ -63,6 +63,9 @@ class TradingScheduler:
         # 22:00 — 글로벌 시장 체크 (미국 프리마켓)
         s.add_job(e.check_global_market, CronTrigger(hour=22, minute=0), id="global_check")
 
+        # 매주 월요일 06:30 — 재무 데이터(PER/PBR/ROE) 주간 갱신
+        s.add_job(e.refresh_fundamentals, CronTrigger(day_of_week="mon", hour=6, minute=30), id="fundamentals_refresh")
+
         # 매주 월요일 09:05 — 주간 리포트
         s.add_job(e.weekly_report, CronTrigger(day_of_week="mon", hour=9, minute=5), id="weekly_report")
 

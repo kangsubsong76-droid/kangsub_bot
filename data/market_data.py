@@ -30,6 +30,7 @@ def get_stock_ohlcv(code: str, days: int = 120) -> pd.DataFrame:
         try:
             df = krx.get_market_ohlcv_by_date(start, end, _krx_code(code))
             if not df.empty:
+                df = df.iloc[:, :5]  # 시가/고가/저가/종가/거래량 (7컬럼 중 앞 5개만)
                 df.columns = ["open", "high", "low", "close", "volume"]
                 df.index.name = "date"
                 return df
@@ -60,6 +61,7 @@ def get_kospi_ohlcv(days: int = 120) -> pd.DataFrame:
         try:
             df = krx.get_index_ohlcv_by_date(start, end, "1001")  # 코스피
             if not df.empty:
+                df = df.iloc[:, :5]  # 시가/고가/저가/종가/거래량 (7컬럼 중 앞 5개만)
                 df.columns = ["open", "high", "low", "close", "volume"]
                 df.index.name = "date"
                 return df
