@@ -37,7 +37,7 @@ from data.market_data import (
 )
 from data.fundamentals import refresh_all as refresh_fundamentals_data, get_fundamentals, is_cache_fresh
 
-from notification.telegram_bot import TelegramNotifier
+from notification.telegram_bot import TelegramNotifier, TelegramCommandBot
 from notification.notion_logger import NotionLogger
 from scheduler.jobs import TradingScheduler
 from utils.logger import setup_logger
@@ -68,6 +68,7 @@ class MainEngine:
         self.dart = DartClient()
         self.notifier = TelegramNotifier()
         self.notion = NotionLogger()
+        self.cmd_bot = TelegramCommandBot(engine_callback=self.handle_telegram_command)
 
         # 캐시
         self._cached_news = []
@@ -422,6 +423,18 @@ if __name__ == "__main__":
     scheduler = TradingScheduler(engine)
     scheduler.start()
     engine.running = True
+
+    # 텔레그램 명령 봇 — 별도 스레드로 실행
+    import threading
+    def run_cmd_bot():
+        try:
+            engine.cmd_bot.build().run()
+        except Exception as e:
+            log.error(f"텔레그램 명령 봇 오류: {e}")
+
+    cmd_thread = threading.Thread(target=run_cmd_bot, daemon=True, name="TelegramCmdBot")
+    cmd_thread.start()
+    log.info("텔레그램 명령 봇 시작 (/help, /status, /balance 등 사용 가능)")
 
     log.info("KangSub Bot 가동 중... (Ctrl+C 로 종료)")
     try:
