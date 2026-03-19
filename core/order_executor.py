@@ -4,11 +4,11 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from config.settings import (
     TWAP_INTERVALS, TWAP_INTERVAL_MINUTES, TWAP_START, TWAP_END,
-    SPLIT_BUY_RATIOS,
+    SPLIT_BUY_RATIOS, KIWOOM_MOCK, LOG_DIR,
 )
 from utils.logger import setup_logger
 
-log = setup_logger("order_executor")
+log = setup_logger("order_executor", LOG_DIR)
 
 
 @dataclass
@@ -30,9 +30,10 @@ class OrderExecutor:
     """
 
     def __init__(self, kiwoom_api=None, paper_trading: bool = False):
+        # kiwoom_api가 KiwoomRestAPI 인스턴스이거나 None
         self.kiwoom = kiwoom_api
         self.paper_trading = paper_trading or (kiwoom_api is None)
-        mode = "페이퍼트레이딩" if self.paper_trading else "실전매매"
+        mode = "페이퍼트레이딩" if self.paper_trading else ("모의투자" if KIWOOM_MOCK else "실전매매")
         log.info(f"주문 실행기 초기화 [{mode}]")
 
     def _is_market_open(self) -> bool:
@@ -132,25 +133,21 @@ class OrderExecutor:
 
         if self.kiwoom:
             try:
-                order_type = "1" if side == "BUY" else "2"
-                result = self.kiwoom.SendOrder(
-                    "자동매매",      # 주문명
-                    "0101",          # 화면번호
-                    self.kiwoom.GetLoginInfo("ACCNO").strip(),  # 계좌번호
-                    order_type,      # 주문유형 (1:매수, 2:매도)
-                    code,            # 종목코드
-                    qty,             # 수량
-                    0,               # 가격 (0=시장가)
-                    "03",            # 거래구분 (03=시장가)
-                    "",
-                )
-                if result == 0:
-                    return price  # 체결가 추후 실시간 확인
+                # KiwoomRestAPI 사용 (REST API)
+                if side == "BUY":
+                    result = self.kiwoom.buy_market(code, qty)
                 else:
-                    log.error(f"주문 실패: {code} {side} {qty}주 (error={result})")
+                    result = self.kiwoom.sell_market(code, qty)
+
+                if result and result.get("rt_cd") == "0":
+                    log.info(f"REST API 주문 성공: {code} {side} {qty}주")
+                    return price
+                else:
+                    msg = result.get("msg1", "알 수 없는 오류") if result else "응답 없음"
+                    log.error(f"REST API 주문 실패: {code} {side} {qty}주 — {msg}")
                     return 0
             except Exception as e:
-                log.error(f"키움 주문 오류: {e}")
+                log.error(f"키움 REST API 주문 오류: {e}")
                 return 0
 
         log.warning("키움 API 미연결 — 주문 스킵")

@@ -38,6 +38,7 @@ from data.market_data import (
 from data.fundamentals import refresh_all as refresh_fundamentals_data, get_fundamentals, is_cache_fresh
 
 from notification.telegram_bot import TelegramNotifier, TelegramCommandBot
+from core.kiwoom_rest import KiwoomRestAPI
 from notification.notion_logger import NotionLogger
 from scheduler.jobs import TradingScheduler
 from utils.logger import setup_logger
@@ -62,7 +63,12 @@ class MainEngine:
         # 모듈 초기화
         self.portfolio = PortfolioManager()
         self.risk = RiskManager()
-        self.executor = OrderExecutor(kiwoom_api=None, paper_trading=paper)
+
+        # 키움 REST API 연결
+        self.kiwoom = KiwoomRestAPI()
+        kiwoom_connected = self.kiwoom.test_connection() if not paper else False
+        kiwoom_api = self.kiwoom if kiwoom_connected else None
+        self.executor = OrderExecutor(kiwoom_api=kiwoom_api, paper_trading=paper)
         self.news_analyzer = NewsAnalyzer()
         self.signal_engine = SignalEngine()
         self.dart = DartClient()

@@ -14,6 +14,13 @@ sys.path.insert(0, str(BASE))
 from flask import Flask, jsonify, send_from_directory
 from config.universe import SECTORS, DIVIDEND_TOP12
 
+# 키움 REST API (잔고 실시간 조회)
+try:
+    from core.kiwoom_rest import KiwoomRestAPI
+    _kiwoom = KiwoomRestAPI()
+except Exception:
+    _kiwoom = None
+
 app = Flask(__name__, static_folder=str(Path(__file__).parent / "static"))
 
 DATA_STORE = BASE / "data" / "store"
@@ -44,15 +51,23 @@ def strategy():
 
 @app.route("/api/portfolio")
 def api_portfolio():
+    # 1) 키움 REST API 실시간 잔고 조회 시도
+    if _kiwoom:
+        try:
+            balance = _kiwoom.get_balance()
+            if balance and not balance.get("error"):
+                return jsonify(balance)
+        except Exception:
+            pass
+    # 2) 로컬 캐시 파일 fallback
     data = _read(DATA_STORE / "portfolio.json", {
         "total_capital": 100_000_000,
         "total_value":   100_000_000,
         "cash":          100_000_000,
         "total_pnl":     0.0,
-        "general_value": 0,
-        "dividend_value":0,
+        "total_pnl_pct": 0.0,
         "num_holdings":  0,
-        "holdings":      {},
+        "holdings":      [],
     })
     return jsonify(data)
 
