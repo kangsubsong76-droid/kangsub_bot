@@ -79,6 +79,8 @@ class MainEngine:
         # 캐시
         self._cached_news = []
         self._cached_signals = []
+        # 손절 알림 중복 방지 (같은 종목 30분 내 재발송 금지)
+        self._stop_loss_alerted: dict = {}  # {code: datetime}
 
         log.info("모든 모듈 초기화 완료")
 
@@ -214,6 +216,13 @@ class MainEngine:
             alerts = self.risk.run_all_checks(code, stock_change, kospi_change)
 
             for alert in alerts:
+                # 같은 종목 30분 내 중복 알림 방지 (SELL_ALL은 항상 전송)
+                now = datetime.now()
+                last = self._stop_loss_alerted.get(code)
+                if alert["action"] != "SELL_ALL" and last and (now - last).seconds < 1800:
+                    log.debug(f"손절 알림 중복 스킵: {code} (마지막: {last:%H:%M})")
+                    continue
+                self._stop_loss_alerted[code] = now
                 asyncio.run(self.notifier.send_stop_loss_alert(alert))
                 if alert["action"] == "SELL_NOW":
                     result = self.executor.sell(code, holding.name, holding.quantity, current, alert["type"])
@@ -250,14 +259,35 @@ class MainEngine:
 
     def check_dart_disclosures(self):
         log.info("[16:00] DART 공시 체크")
+        from config.settings import DART_API_KEY
+        if not DART_API_KEY:
+            log.info("DART API 키 미설정 — 공시 체크 스킵")
+            return
+
         for code in get_unique_codes():
             corp_code = self.dart.get_corp_code(code)
-            if corp_code:
-                negatives = self.dart.check_negative_disclosures(corp_code)
-                for d in negatives:
-                    asyncio.run(self.notifier.send(
-                        f"⚠️ <b>부정 공시 감지</b>\n{d.corp_name}: {d.report_nm}\n{d.url}"
-                    ))
+            if not corp_code:
+                continue
+
+            # 부정 공시 (횡령·상장폐지 등 실제 위험만)
+            for d in self.dart.check_negative_disclosures(corp_code):
+                asyncio.run(self.notifier.send(
+                    f"🚨 <b>중요 부정 공시</b>\n"
+                    f"종목: {d.corp_name}\n"
+                    f"공시: {d.report_nm}\n"
+                    f"일자: {d.rcept_dt}\n"
+                    f"🔗 {d.url}"
+                ))
+
+            # 긍정 공시 (자사주·배당 등 매수 기회)
+            for d in self.dart.check_positive_disclosures(corp_code):
+                asyncio.run(self.notifier.send(
+                    f"📢 <b>주요 공시</b>\n"
+                    f"종목: {d.corp_name}\n"
+                    f"공시: {d.report_nm}\n"
+                    f"일자: {d.rcept_dt}\n"
+                    f"🔗 {d.url}"
+                ))
 
     def daily_report(self):
         summary = self.portfolio.get_summary()

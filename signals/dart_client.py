@@ -101,23 +101,58 @@ class DartClient:
             log.error(f"재무제표 조회 실패: {e}")
             return None
 
-    def check_negative_disclosures(self, corp_code: str, days: int = 7) -> list[DartDisclosure]:
-        """부정적 공시 체크 (횡령, 소송, 감자, 상장폐지 등)"""
-        negative_keywords = [
-            "횡령", "배임", "소송", "감자", "상장폐지", "관리종목",
-            "투자주의", "불성실공시", "조회공시", "풍문", "정정",
-            "영업정지", "부도", "회생", "파산",
-        ]
+    # ── 중복 발송 방지 (메모리 캐시) ──
+    _seen_rcept_nos: set = set()
+
+    # 실제로 중요한 공시 키워드만 (정정/풍문/조회공시 제외)
+    NEGATIVE_KEYWORDS = [
+        "횡령", "배임", "감자", "상장폐지", "관리종목",
+        "불성실공시", "영업정지", "부도", "회생절차", "파산",
+        "과징금", "검찰", "수사", "압수수색",
+    ]
+
+    # 매수 기회가 될 수 있는 중요 공시 (긍정 알림)
+    POSITIVE_KEYWORDS = [
+        "자사주취득", "주식매수선택권", "대규모수주", "최대실적",
+        "배당결정", "현금배당", "특별배당",
+    ]
+
+    def check_negative_disclosures(self, corp_code: str, days: int = 1) -> list[DartDisclosure]:
+        """
+        중요 부정 공시만 필터링 (하루 기준, 중복 제거)
+        - 제외: 정정, 풍문, 조회공시 (너무 빈번해 노이즈)
+        - 포함: 횡령/배임/상장폐지 등 실제 위험 공시만
+        """
         disclosures = self.search_disclosures(
             corp_code=corp_code,
             bgn_de=(datetime.now() - timedelta(days=days)).strftime("%Y%m%d"),
         )
         negatives = []
         for d in disclosures:
-            if any(kw in d.report_nm for kw in negative_keywords):
+            # 중복 발송 방지
+            if d.rcept_no in self._seen_rcept_nos:
+                continue
+            if any(kw in d.report_nm for kw in self.NEGATIVE_KEYWORDS):
                 negatives.append(d)
-                log.warning(f"[부정공시] {d.corp_name}: {d.report_nm}")
+                self._seen_rcept_nos.add(d.rcept_no)
+                log.warning(f"[중요공시-부정] {d.corp_name}: {d.report_nm}")
         return negatives
+
+    def check_positive_disclosures(self, corp_code: str, days: int = 1) -> list[DartDisclosure]:
+        """자사주 취득·배당 결정 등 주가 상승 공시"""
+        disclosures = self.search_disclosures(
+            corp_code=corp_code,
+            bgn_de=(datetime.now() - timedelta(days=days)).strftime("%Y%m%d"),
+        )
+        positives = []
+        for d in disclosures:
+            if d.rcept_no in self._seen_rcept_nos:
+                continue
+            if any(kw in d.report_nm for kw in self.POSITIVE_KEYWORDS):
+                positives.append(d)
+                self._seen_rcept_nos.add(d.rcept_no)
+                log.info(f"[중요공시-긍정] {d.corp_name}: {d.report_nm}")
+        return positives
 
     # 종목코드 → DART 고유번호 매핑 (유니버스 종목)
     _corp_code_map = {
