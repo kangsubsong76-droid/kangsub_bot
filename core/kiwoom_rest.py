@@ -1,10 +1,14 @@
 """
 키움증권 REST API 클라이언트
-openapi.kiwoom.com — 잔고조회 / 주문 / 실시간 시세
+api.kiwoom.com — 잔고조회 / 주문 / 실시간 시세
 
 계좌: 6594-7112
-모의투자: KIWOOM_MOCK=true (기본값)
-실전매매: KIWOOM_MOCK=false (REST API 신청 승인 후)
+모의투자: KIWOOM_MOCK=true  → https://mockapi.kiwoom.com
+실전매매: KIWOOM_MOCK=false → https://api.kiwoom.com
+
+※ 엔드포인트 확인 방법:
+   openapi.kiwoom.com 로그인 → API 문서 → 각 TR별 URL 확인
+   현재 구현은 공개된 래퍼 라이브러리 기반 추정값 — 실제 문서와 대조 필요
 """
 import time
 import requests
@@ -17,13 +21,9 @@ from config.settings import (
 
 log = setup_logger("kiwoom_rest", LOG_DIR)
 
-# ── API 엔드포인트 ──────────────────────────────────────────
-BASE_REAL = "https://openapi.kiwoom.com:9443"
-BASE_MOCK = "https://openapi.kiwoom.com:9443"  # 모의투자도 동일 호스트, tr_id로 구분
-
-# 모의투자 여부에 따라 tr_id prefix가 달라짐
-# 실전: TTTC → 모의: VTTC (주식), VTTS → 실전: TTTS (해외)
-TR_PREFIX = "V" if KIWOOM_MOCK else "T"
+# ── API 엔드포인트 (포트 443 표준 HTTPS) ─────────────────────
+BASE_REAL = "https://api.kiwoom.com"           # 실전
+BASE_MOCK = "https://mockapi.kiwoom.com"       # 모의투자
 
 HEADERS_BASE = {
     "Content-Type": "application/json; charset=utf-8",
@@ -40,12 +40,15 @@ class KiwoomRestAPI:
         self.account    = KIWOOM_ACCOUNT.replace("-", "")  # "65947112"
         self.mock       = KIWOOM_MOCK
         self.base_url   = BASE_MOCK if KIWOOM_MOCK else BASE_REAL
+        # TR_ID 접두사: 모의=V, 실전=T (일부 TR에 적용)
+        self.tr_prefix  = "V" if KIWOOM_MOCK else "T"
 
         self._access_token = None
         self._token_expire = datetime.min
 
         mode = "모의투자" if self.mock else "실전매매"
         log.info(f"KiwoomRestAPI 초기화 ({mode}) 계좌: {self.account}")
+        log.info(f"API 서버: {self.base_url}")
 
         if not self.app_key or not self.secret_key:
             log.warning("KIWOOM_APP_KEY / KIWOOM_SECRET_KEY 미설정 — .env 확인 필요")
