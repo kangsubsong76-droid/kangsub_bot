@@ -677,13 +677,19 @@ class MainEngine:
     def _nxt_fallback_from_afterhours(self, tried_codes: set) -> list:
         """
         Claude 재시도에서도 적격 종목이 없을 때 최후 수단:
-        afterhours_result.json 전체 풀을 변동률 순으로 스캔해 적격 1종목 반환.
+        원본 시간외 전체 풀(afterhours_raw.json)을 변동률 순으로 스캔해 적격 1종목 반환.
         tried_codes: 이미 시도했던 종목코드 집합 (제외 대상)
+
+        ※ STEP1.5 이후 afterhours_result.json 은 적격 종목만 포함되어 있으므로
+          원본 백업인 afterhours_raw.json 을 우선 사용.
         """
-        from surge_predictor.signal_analyzer import AFTERHOURS_PATH
         import json as _json
+        # 원본 백업 우선, 없으면 현재 파일 사용
+        raw_path = DATA_DIR / "afterhours_raw.json"
+        ah_path  = DATA_DIR / "afterhours_result.json"
+        src_path = raw_path if raw_path.exists() else ah_path
         try:
-            ah = _json.loads(AFTERHOURS_PATH.read_text(encoding="utf-8"))
+            ah = _json.loads(src_path.read_text(encoding="utf-8"))
         except Exception:
             return []
 
@@ -706,9 +712,150 @@ class MainEngine:
                 }]
         return []
 
+    def _pre_filter_afterhours(self) -> tuple[int, int]:
+        """
+        [STEP 1.5] Claude 분석 前 NXT 사전 적격 필터링
+        afterhours_result.json 종목 중 장전거래 불가 종목을 제거하고
+        적격 종목만 남겨 Claude 가 처음부터 올바른 풀만 보도록 함.
+
+        - 페이퍼 모드 / Kiwoom 미연결: 필터 생략, 원본 그대로 사용
+        - 적격 < 5개: _expand_eligible_pool() 로 ka10027 확장 조회
+        - 원본은 afterhours_raw.json 에 백업 (당일 디버깅용)
+
+        반환: (eligible_count, total_count)
+        """
+        import json as _json
+        ah_path = DATA_DIR / "afterhours_result.json"
+        if not ah_path.exists():
+            return 0, 0
+
+        try:
+            ah_data = _json.loads(ah_path.read_text(encoding="utf-8"))
+            stocks  = ah_data.get("stocks", [])
+            total   = len(stocks)
+
+            if not (self.kiwoom and not self.paper):
+                log.info(f"  사전 필터 생략(페이퍼/미연결) — {total}종목 그대로 사용")
+                return total, total
+
+            eligible, ineligible = [], []
+            for s in stocks:
+                ok, reason = self.kiwoom.is_nxt_eligible(s["code"])
+                if ok:
+                    eligible.append(s)
+                    log.info(f"  ✅ 적격: {s['name']}({s['code']})")
+                else:
+                    ineligible.append((s, reason))
+                    log.info(f"  ⛔ 사전제외: {s['name']}({s['code']}) — {reason}")
+
+            log.info(f"사전 적격 필터: {len(eligible)}/{total}종목 통과")
+
+            # 적격 < 5개 → 확장 조회 (ka10027 등락률순위에서 추가)
+            MIN_POOL = 5
+            if len(eligible) < MIN_POOL:
+                excluded = {s["code"] for s in stocks}  # 이미 검사한 종목 재검사 방지
+                log.warning(
+                    f"사전 적격 종목 부족 ({len(eligible)}개 < {MIN_POOL}) "
+                    f"— 확장 조회 시작"
+                )
+                eligible = self._expand_eligible_pool(eligible, excluded, target=MIN_POOL)
+
+            # afterhours_result.json 을 적격 종목만으로 덮어씀
+            # 원본은 afterhours_raw.json 에 백업
+            raw_path = DATA_DIR / "afterhours_raw.json"
+            raw_path.write_text(ah_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+            ah_data["stocks"]               = eligible
+            ah_data["pre_filtered"]         = True
+            ah_data["pre_filter_total"]     = total
+            ah_data["pre_filter_eligible"]  = len(eligible)
+            ah_path.write_text(
+                _json.dumps(ah_data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            log.info(f"afterhours_result.json → 적격 {len(eligible)}종목으로 갱신")
+            return len(eligible), total
+
+        except Exception as e:
+            log.error(f"사전 적격 필터 오류: {e}")
+            return 0, 0
+
+    def _expand_eligible_pool(
+        self, current: list, excluded: set, target: int = 5
+    ) -> list:
+        """
+        적격 종목 부족 시 ka10027 등락률순위에서 추가 탐색.
+
+        current  : 이미 확보된 적격 종목 리스트 (in-place 확장)
+        excluded : 이미 검사한 종목코드 집합 (재검사/재선정 방지)
+        target   : 확보 목표 종목 수
+        """
+        if not (self.kiwoom and not self.paper):
+            return current
+
+        log.info(f"[확장 조회] 목표 {target}개 / 현재 {len(current)}개")
+        try:
+            candidates = []
+            for market in ["0", "1"]:  # 코스피, 코스닥
+                rows  = self.kiwoom.get_surge_ranking(market=market, top_n=100)
+                label = "코스피" if market == "0" else "코스닥"
+                for r in rows:
+                    code = str(r.get("code", "")).zfill(6)
+                    if not code or code in excluded:
+                        continue
+                    try:
+                        rate_f    = float(
+                            str(r.get("change_rate", 0)).replace("%", "").replace("+", "")
+                        )
+                        vol_i     = int(str(r.get("volume", 0)).replace(",", ""))
+                        prev_v    = int(str(r.get("prev_volume", 1)).replace(",", "") or 1) or 1
+                        vol_ratio = round(vol_i / prev_v, 1)
+                        # 시간외 필터 조건 준용
+                        if 1.0 <= rate_f <= 15.0 and vol_ratio >= 1.5:
+                            candidates.append({
+                                "code":        code,
+                                "name":        r.get("name", ""),
+                                "price":       str(r.get("price", "0")),
+                                "change_rate": rate_f,
+                                "volume":      vol_i,
+                                "prev_volume": prev_v,
+                                "vol_ratio":   vol_ratio,
+                                "market":      label,
+                                "source":      "ka10027_expand",
+                            })
+                            excluded.add(code)
+                    except Exception:
+                        pass
+
+            # 등락률 내림차순 정렬 후 적격 확인
+            candidates.sort(key=lambda x: x["change_rate"], reverse=True)
+            for s in candidates:
+                if len(current) >= target:
+                    break
+                ok, reason = self.kiwoom.is_nxt_eligible(s["code"])
+                if ok:
+                    current.append(s)
+                    log.info(
+                        f"  ✅ 확장 적격: {s['name']}({s['code']}) "
+                        f"+{s['change_rate']}% 거래량{s['vol_ratio']}배"
+                    )
+                else:
+                    log.info(f"  ⛔ 확장 부적격: {s['name']}({s['code']}) — {reason}")
+
+            log.info(f"[확장 조회] 완료: {len(current)}종목 확보")
+        except Exception as e:
+            log.error(f"확장 조회 실패: {e}")
+        return current
+
     def collect_afterhours(self):
-        """[07:30] 시간외 단일가 수집 → Claude 분석 → 적격 필터 → NXT 후보 확정
-        적격 종목 0개면 Claude 재시도(최대 2회) → 그래도 없으면 시간외 풀 직접 스캔
+        """[07:30] 시간외 단일가 수집 → 사전 적격 필터 → Claude 분석 → NXT 후보 확정
+
+        플로우:
+          STEP1   : afterhours_collector — 시간외 상위 20종목 수집
+          STEP1.5 : _pre_filter_afterhours — 부적격 제거 → 적격 풀만 Claude에 전달
+                    (적격 < 5개면 ka10027 확장 조회로 보충)
+          STEP2   : signal_analyzer (Claude) — 적격 풀에서 3종목 선정
+          STEP3   : _filter_nxt_eligible — 이중 안전장치 (STEP1.5 통과 후에도 확인)
+          STEP4   : 폴백 — 시간외 전체 풀(afterhours_raw.json) 직접 스캔
         """
         log.info("[07:30] NXT STEP1 — 시간외 수집 시작")
         try:
@@ -719,6 +866,26 @@ class MainEngine:
             result = collect()
             if not result or result.get("count", 0) == 0:
                 log.warning("시간외 종목 없음 — Claude 직접 분석으로 전환")
+
+            # ── STEP1.5: Claude 분석 前 NXT 사전 적격 필터링 ──────────────
+            # 부적격 종목을 afterhours_result.json 에서 미리 제거
+            # → Claude 가 처음부터 장전거래 가능 종목만 보고 선정
+            log.info("[07:30] NXT STEP1.5 — 사전 적격 필터링")
+            eligible_pre, total_pre = self._pre_filter_afterhours()
+            log.info(f"  사전 필터 완료: 적격 {eligible_pre} / 전체 {total_pre}종목")
+
+            if total_pre > 0 and eligible_pre == 0:
+                asyncio.run(self.notifier.send(
+                    "⚠️ NXT 사전 필터: 시간외 종목 전원 장전거래 불가\n"
+                    "확장 조회 결과도 0개 → 오늘 NXT 매수 없음 가능성 높음"
+                ))
+            elif eligible_pre < total_pre:
+                asyncio.run(self.notifier.send(
+                    f"🔍 NXT 사전 필터 완료\n"
+                    f"적격 {eligible_pre}종목 / 전체 {total_pre}종목 "
+                    f"({total_pre - eligible_pre}종목 사전제외)\n"
+                    f"Claude 분석 시작 →"
+                ))
 
             # ── STEP2: Claude 분석 (최대 3회 시도) ────────────────────────
             MAX_ATTEMPTS = 3
