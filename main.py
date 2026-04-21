@@ -647,62 +647,141 @@ class MainEngine:
 
     # ── NXT 전략 (장전거래 08:00) ──────────────────────────
 
+    def _filter_nxt_eligible(self, stocks: list) -> tuple[list, list]:
+        """종목 리스트에서 장전거래 적격 종목만 분리. (eligible, skipped) 반환"""
+        if not (self.kiwoom and not self.paper):
+            return stocks, []
+        eligible, skipped = [], []
+        for s in stocks:
+            ok, reason = self.kiwoom.is_nxt_eligible(s["code"])
+            if ok:
+                eligible.append(s)
+                log.info(f"  ✅ 적격: {s['name']}({s['code']})")
+            else:
+                skipped.append((s, reason))
+                log.warning(f"  ❌ 부적격: {s['name']}({s['code']}) — {reason}")
+        return eligible, skipped
+
+    def _nxt_fallback_from_afterhours(self, tried_codes: set) -> list:
+        """
+        Claude 재시도에서도 적격 종목이 없을 때 최후 수단:
+        afterhours_result.json 전체 풀을 변동률 순으로 스캔해 적격 1종목 반환.
+        tried_codes: 이미 시도했던 종목코드 집합 (제외 대상)
+        """
+        from surge_predictor.signal_analyzer import AFTERHOURS_PATH
+        import json as _json
+        try:
+            ah = _json.loads(AFTERHOURS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+
+        pool = [s for s in ah.get("stocks", []) if s.get("code") not in tried_codes]
+        # 변동률 내림차순 정렬
+        pool.sort(key=lambda x: float(str(x.get("change_rate", 0)).replace("%", "") or 0), reverse=True)
+
+        for s in pool:
+            ok, reason = self.kiwoom.is_nxt_eligible(s["code"]) if (self.kiwoom and not self.paper) else (True, "페이퍼")
+            if ok:
+                log.info(f"  ✅ 폴백 적격: {s['name']}({s['code']})")
+                return [{
+                    "rank": 1,
+                    "code": s["code"],
+                    "name": s["name"],
+                    "confidence": "MID",
+                    "afterhours_price": s.get("price"),
+                    "change_rate": s.get("change_rate"),
+                    "vol_ratio": s.get("vol_ratio"),
+                }]
+        return []
+
     def collect_afterhours(self):
-        """[07:30] 시간외 단일가 수집 → Claude 분석 → NXT 후보 확정"""
+        """[07:30] 시간외 단일가 수집 → Claude 분석 → 적격 필터 → NXT 후보 확정
+        적격 종목 0개면 Claude 재시도(최대 2회) → 그래도 없으면 시간외 풀 직접 스캔
+        """
         log.info("[07:30] NXT STEP1 — 시간외 수집 시작")
         try:
             from surge_predictor.afterhours_collector import run as collect
+            from surge_predictor.signal_analyzer import run as analyze, CANDIDATES_PATH
+            import json as _json
+
             result = collect()
             if not result or result.get("count", 0) == 0:
                 log.warning("시간외 종목 없음 — Claude 직접 분석으로 전환")
 
-            log.info("[07:30] NXT STEP2 — Claude 시그널 분석")
-            from surge_predictor.signal_analyzer import run as analyze
-            analysis = analyze()
+            # ── STEP2: Claude 분석 (최대 3회 시도) ────────────────────────
+            MAX_ATTEMPTS = 3
+            candidates = None
+            eligible_stocks: list = []
+            all_skipped: list = []
+            tried_codes: set = set()
 
-            if not analysis:
-                asyncio.run(self.notifier.send("⚠️ NXT 분석 실패 — 오늘 NXT 매수 없음"))
-                return
+            for attempt in range(1, MAX_ATTEMPTS + 1):
+                log.info(f"[07:30] NXT STEP2 — Claude 시그널 분석 (시도 {attempt}/{MAX_ATTEMPTS})")
+                analysis = analyze()
+                if not analysis:
+                    asyncio.run(self.notifier.send(f"⚠️ NXT 분석 실패 ({attempt}회차)"))
+                    continue
 
-            candidates = analysis.get("candidates", {})
-            if candidates and candidates.get("stop"):
-                asyncio.run(self.notifier.send(
-                    f"🚫 NXT 매매 중단\n"
-                    f"사유: 나스닥 {candidates.get('nasdaq_change', 0):+.2f}% / "
-                    f"VIX {candidates.get('vix', 0):.1f}"
-                ))
-                return
-
-            stocks = candidates.get("stocks", []) if candidates else []
-
-            # ── STEP3: 장전거래 적격 필터링 (07:30에 사전 검증) ──────────
-            if stocks and self.kiwoom and not self.paper:
-                log.info("[07:30] NXT STEP3 — 장전거래 적격 필터링 시작")
-                eligible_stocks, skipped_stocks = [], []
-                for s in stocks:
-                    eligible, reason = self.kiwoom.is_nxt_eligible(s["code"])
-                    if eligible:
-                        eligible_stocks.append(s)
-                        log.info(f"  ✅ 적격: {s['name']}({s['code']})")
-                    else:
-                        skipped_stocks.append((s, reason))
-                        log.warning(f"  ❌ 부적격: {s['name']}({s['code']}) — {reason}")
-
-                # 부적격 종목 텔레그램 알림
-                if skipped_stocks:
-                    skip_lines = "\n".join(
-                        f"  ❌ {s['name']} ({s['code']}): {r}"
-                        for s, r in skipped_stocks
-                    )
+                candidates = analysis.get("candidates", {})
+                if candidates and candidates.get("stop"):
                     asyncio.run(self.notifier.send(
-                        f"⚠️ <b>NXT 적격 필터 결과</b>\n"
-                        f"━━━━━━━━━━━━━━━━━\n"
-                        f"부적격 제외:\n{skip_lines}"
+                        f"🚫 NXT 매매 중단\n"
+                        f"사유: 나스닥 {candidates.get('nasdaq_change', 0):+.2f}% / "
+                        f"VIX {candidates.get('vix', 0):.1f}"
                     ))
+                    return
 
-                # nxt_candidates.json을 적격 종목만으로 덮어쓰기
-                from surge_predictor.signal_analyzer import CANDIDATES_PATH
-                import json as _json
+                stocks = candidates.get("stocks", []) if candidates else []
+                # 이미 시도한 종목 제외
+                new_stocks = [s for s in stocks if s["code"] not in tried_codes]
+                tried_codes.update(s["code"] for s in stocks)
+
+                if not new_stocks:
+                    log.warning(f"  시도 {attempt}: 새 종목 없음 — 재시도")
+                    continue
+
+                # ── STEP3: 적격 필터링 ──────────────────────────────────
+                log.info(f"[07:30] NXT STEP3 — 적격 필터링 (시도 {attempt})")
+                eligible, skipped = self._filter_nxt_eligible(new_stocks)
+                all_skipped.extend(skipped)
+
+                if eligible:
+                    eligible_stocks = eligible
+                    log.info(f"  ✅ {attempt}회차에서 적격 종목 {len(eligible)}개 확보")
+                    break
+                else:
+                    log.warning(f"  시도 {attempt}: 적격 종목 0개 — 재시도")
+                    if attempt < MAX_ATTEMPTS:
+                        asyncio.run(self.notifier.send(
+                            f"🔄 NXT 재분석 중 ({attempt}/{MAX_ATTEMPTS})\n"
+                            f"이전 후보 전원 부적격 — Claude 재시도"
+                        ))
+
+            # ── STEP4: 폴백 — 시간외 전체 풀 직접 스캔 ─────────────────
+            if not eligible_stocks:
+                log.warning("[07:30] NXT STEP4 — 폴백: 시간외 전체 풀 스캔")
+                asyncio.run(self.notifier.send(
+                    f"⚠️ Claude 후보 전원 부적격\n"
+                    f"시간외 전체 풀에서 적격 종목 직접 탐색 중..."
+                ))
+                eligible_stocks = self._nxt_fallback_from_afterhours(tried_codes)
+                if eligible_stocks:
+                    log.info(f"  폴백 성공: {eligible_stocks[0]['name']} 선정")
+                else:
+                    log.error("  폴백 실패: 적격 종목 없음")
+
+            # ── 부적격 알림 ───────────────────────────────────────────
+            if all_skipped:
+                skip_lines = "\n".join(
+                    f"  ❌ {s['name']} ({s['code']}): {r}"
+                    for s, r in all_skipped
+                )
+                asyncio.run(self.notifier.send(
+                    f"⚠️ <b>NXT 부적격 제외 목록</b>\n{skip_lines}"
+                ))
+
+            # ── nxt_candidates.json 저장 ──────────────────────────────
+            if candidates:
                 updated = dict(candidates)
                 updated["stocks"] = eligible_stocks
                 updated["filtered_at"] = datetime.now().strftime("%H:%M:%S")
@@ -710,15 +789,12 @@ class MainEngine:
                     _json.dumps(updated, ensure_ascii=False, indent=2),
                     encoding="utf-8"
                 )
-                stocks = eligible_stocks
-                log.info(f"NXT 적격 필터 완료: {len(eligible_stocks)}/{len(candidates.get('stocks', []))}종목 통과")
-            else:
-                eligible_stocks = stocks
 
-            if stocks:
+            # ── 최종 결과 텔레그램 ────────────────────────────────────
+            if eligible_stocks:
                 stock_list = "\n".join(
-                    f"  {s['rank']}. {s['name']} ({s['code']}) [{s['confidence']}]"
-                    for s in stocks
+                    f"  {i+1}. {s['name']} ({s['code']}) [{s['confidence']}]"
+                    for i, s in enumerate(eligible_stocks)
                 )
                 asyncio.run(self.notifier.send(
                     f"✅ <b>NXT 최종 매수 대상</b>\n"
@@ -727,8 +803,11 @@ class MainEngine:
                     f"⏰ 08:00 장전거래 매수 예정"
                 ))
             else:
-                asyncio.run(self.notifier.send("🚫 NXT 적격 종목 없음 — 오늘 매수 없음"))
-            log.info(f"NXT 최종 후보: {len(stocks)}종목")
+                asyncio.run(self.notifier.send(
+                    "🚫 NXT 적격 종목 없음 — 오늘 매수 없음\n"
+                    "(거래정지/관리종목/코넥스만 존재)"
+                ))
+            log.info(f"NXT 최종 후보: {len(eligible_stocks)}종목")
 
         except Exception as e:
             log.error(f"collect_afterhours 오류: {e}")
