@@ -72,6 +72,12 @@ class MainEngine:
         kiwoom_connected = self.kiwoom.test_connection() if not paper else False
         kiwoom_api = self.kiwoom if kiwoom_connected else None
         self.executor = OrderExecutor(kiwoom_api=kiwoom_api, paper_trading=paper)
+
+        # market_data에 키움 인스턴스 주입 (OHLCV를 키움 API로 조회)
+        if kiwoom_connected:
+            from data.market_data import set_kiwoom
+            set_kiwoom(self.kiwoom)
+            log.info("market_data: 키움 REST API OHLCV 활성화")
         self.news_analyzer = NewsAnalyzer()
         self.signal_engine = SignalEngine()
         self.dart = DartClient()

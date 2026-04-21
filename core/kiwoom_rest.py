@@ -19,6 +19,8 @@
   ka01690  일별잔고수익률 POST /api/dostk/acnt
   ka10001  주식기본정보   POST /api/dostk/stkinfo
   ka10002  주식거래원요청 POST /api/dostk/stkinfo
+  ka10081  주식일봉차트   POST /api/dostk/chart
+  ka10008  업종일봉차트   POST /api/dostk/chart  (001=KOSPI, 101=KOSDAQ)
   ka10075  미체결요청     POST /api/dostk/acnt
   kt10000  주식 매수주문  POST /api/dostk/ordr
   kt10001  주식 매도주문  POST /api/dostk/ordr
@@ -563,6 +565,95 @@ class KiwoomRestAPI:
             return []
         # 응답 필드는 문서 p.187 참조 — 리스트 필드명 확인 후 수정
         return data.get("ord_list", data.get("output", []))
+
+    # ════════════════════════════════════════════════════════
+    # ── 주식 일봉 차트 (ka10081)
+    # ════════════════════════════════════════════════════════
+    def get_stock_ohlcv(self, code: str, days: int = 120) -> "pd.DataFrame":
+        """
+        주식일봉차트조회 (ka10081)
+        반환: DataFrame [open, high, low, close, volume] index=date(str)
+        days: 최근 N일치 요청 (API는 최대 연속조회로 다량 수신 가능)
+        """
+        import pandas as pd
+        from datetime import datetime, timedelta
+        end_dt   = datetime.now()
+        start_dt = end_dt - timedelta(days=days + 60)  # 영업일 여유분 포함
+        body = {
+            "stk_cd":    code.zfill(6),
+            "base_dt":   end_dt.strftime("%Y%m%d"),
+            "upd_stkpc_tp": "1",   # 수정주가 적용
+        }
+        data = self._post("/api/dostk/chart", body, "ka10081")
+        if not data or data.get("return_code") != 0:
+            log.warning(f"ka10081 조회 실패 ({code}): {data.get('return_msg') if data else 'None'}")
+            return pd.DataFrame()
+        rows = data.get("stk_dt_pole_chart_qry", [])
+        if not rows:
+            return pd.DataFrame()
+        records = []
+        for r in rows:
+            try:
+                dt   = str(r.get("dt", ""))
+                # 종가 부호 처리 (등락부호 flu_smbol 없으면 cur_prc 그대로)
+                close = abs(int(str(r.get("cur_prc", r.get("close_pric", 0))).replace(",", "")))
+                records.append({
+                    "date":   dt,
+                    "open":   abs(int(str(r.get("open_pric",  0)).replace(",", ""))),
+                    "high":   abs(int(str(r.get("high_pric",  0)).replace(",", ""))),
+                    "low":    abs(int(str(r.get("low_pric",   0)).replace(",", ""))),
+                    "close":  close,
+                    "volume": abs(int(str(r.get("acml_vol",   r.get("trde_qty", 0))).replace(",", ""))),
+                })
+            except Exception:
+                continue
+        if not records:
+            return pd.DataFrame()
+        df = pd.DataFrame(records).set_index("date")
+        df = df.sort_index()
+        # 최근 days 영업일만 잘라서 반환
+        return df.tail(days)
+
+    # ════════════════════════════════════════════════════════
+    # ── 업종 일봉 차트 (ka10008) — KOSPI/KOSDAQ 지수
+    # ════════════════════════════════════════════════════════
+    def get_index_ohlcv(self, index_code: str = "001", days: int = 120) -> "pd.DataFrame":
+        """
+        업종일봉차트조회 (ka10008)
+        index_code: "001"=KOSPI, "101"=KOSDAQ
+        반환: DataFrame [open, high, low, close, volume] index=date(str)
+        """
+        import pandas as pd
+        from datetime import datetime
+        body = {
+            "upjong_cd": index_code,
+            "base_dt":   datetime.now().strftime("%Y%m%d"),
+        }
+        data = self._post("/api/dostk/chart", body, "ka10008")
+        if not data or data.get("return_code") != 0:
+            log.warning(f"ka10008 조회 실패 ({index_code}): {data.get('return_msg') if data else 'None'}")
+            return pd.DataFrame()
+        rows = data.get("upjong_dt_pole_chart_qry", [])
+        if not rows:
+            return pd.DataFrame()
+        records = []
+        for r in rows:
+            try:
+                records.append({
+                    "date":   str(r.get("dt", "")),
+                    "open":   float(str(r.get("open_pric",  0)).replace(",", "")),
+                    "high":   float(str(r.get("high_pric",  0)).replace(",", "")),
+                    "low":    float(str(r.get("low_pric",   0)).replace(",", "")),
+                    "close":  float(str(r.get("cur_prc",    r.get("close_pric", 0))).replace(",", "")),
+                    "volume": float(str(r.get("acml_vol",   r.get("trde_qty",   0))).replace(",", "")),
+                })
+            except Exception:
+                continue
+        if not records:
+            return pd.DataFrame()
+        df = pd.DataFrame(records).set_index("date")
+        df = df.sort_index()
+        return df.tail(days)
 
     # ════════════════════════════════════════════════════════
     # ── 연결 테스트
