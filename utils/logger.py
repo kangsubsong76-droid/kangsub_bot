@@ -2,7 +2,7 @@
 import logging
 import sys
 from pathlib import Path
-from datetime import datetime
+from logging.handlers import TimedRotatingFileHandler
 
 def setup_logger(name: str, log_dir: Path = None) -> logging.Logger:
     logger = logging.getLogger(name)
@@ -18,7 +18,15 @@ def setup_logger(name: str, log_dir: Path = None) -> logging.Logger:
 
     if log_dir:
         log_dir.mkdir(parents=True, exist_ok=True)
-        fh = logging.FileHandler(log_dir / f"{name}_{datetime.now():%Y%m%d}.log", encoding="utf-8")
+        # 자정마다 날짜별 새 파일 자동 생성 (backup 30일 보관)
+        fh = TimedRotatingFileHandler(
+            log_dir / f"{name}.log",
+            when="midnight",
+            interval=1,
+            backupCount=30,
+            encoding="utf-8",
+        )
+        fh.suffix = "%Y%m%d"          # 백업 파일명: main.log.20260422
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(fmt)
         logger.addHandler(fh)

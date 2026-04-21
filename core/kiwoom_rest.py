@@ -389,10 +389,17 @@ class KiwoomRestAPI:
         """
         body = {"stk_cd": code.zfill(6)}
         data = self._post("/api/dostk/stkinfo", body, "ka10001")
-        if not data or data.get("return_code") != 0:
-            reason = f"종목 조회 실패 (return_code: {data.get('return_code') if data else 'None'})"
-            log.warning(f"is_nxt_eligible [{code}]: {reason}")
-            return False, reason
+        if not data:
+            # 네트워크 오류 — 기회 손실 방지를 위해 통과 허용
+            log.warning(f"is_nxt_eligible [{code}]: API 응답 없음 → 매수 허용")
+            return True, "API 무응답(통과허용)"
+        rc = data.get("return_code", -1)
+        if rc != 0:
+            # return_code: 3 = 데이터 없음 (거래정지 아님) → 통과 허용
+            # return_code: -1, 1, 2 등 명시적 오류만 차단하지 않음
+            # 단, 명백한 인증 오류(return_code: 1)는 경고만 남기고 통과
+            log.warning(f"is_nxt_eligible [{code}]: return_code={rc} → 확인불가, 매수 허용")
+            return True, f"API확인불가(rc={rc},통과허용)"
 
         # ── 1) 거래정지 확인 ──────────────────────────────
         # 키움 API 필드명 후보: trde_halt_tp, trde_halt_yn, halt_yn
