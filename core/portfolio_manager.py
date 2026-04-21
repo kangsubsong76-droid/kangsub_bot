@@ -202,7 +202,7 @@ class PortfolioManager:
 
     def _load(self):
         path = DATA_DIR / "portfolio.json"
-        manual_path = DATA_DIR / "store" / "portfolio_manual.json"
+        manual_path = DATA_DIR / "portfolio_manual.json"   # DATA_DIR = data/store 이미 포함
 
         # 1) bot 관리 포트폴리오 로드
         if path.exists():

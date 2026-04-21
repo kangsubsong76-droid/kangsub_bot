@@ -462,7 +462,7 @@ class MainEngine:
         — Kiwoom ka10001 로 각 종목 현재가 조회 후 평가금액/손익 갱신
         """
         from config.settings import DATA_DIR as _DATA_DIR
-        manual_path = _DATA_DIR / "store" / "portfolio_manual.json"
+        manual_path = _DATA_DIR / "portfolio_manual.json"   # DATA_DIR = data/store 이미 포함
         if not manual_path.exists():
             log.info("portfolio_manual.json 없음 — 동기화 스킵")
             return
@@ -530,7 +530,7 @@ class MainEngine:
           4) 차이 ≤ 1% → "일치 확인" 로그만
         """
         from config.settings import DATA_DIR as _DATA_DIR
-        manual_path = _DATA_DIR / "store" / "portfolio_manual.json"
+        manual_path = _DATA_DIR / "portfolio_manual.json"   # DATA_DIR = data/store 이미 포함
         if not manual_path.exists():
             log.info("reconcile: portfolio_manual.json 없음 — 스킵")
             return
