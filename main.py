@@ -867,8 +867,10 @@ class MainEngine:
             ))
             return
 
-        # 시간외 가격 맵 로드 (afterhours_result.json → code: price)
-        afterhours_prices = {}
+        # 시간외 가격 + 갭 정보 맵 로드 (afterhours_result.json)
+        # code → {"price": int, "change_rate": float, "vol_ratio": float}
+        afterhours_prices = {}   # code → int (하위호환)
+        afterhours_info   = {}   # code → 전체 정보 (갭 필터용)
         try:
             ah_path = DATA_DIR / "afterhours_result.json"
             if ah_path.exists():
@@ -876,7 +878,13 @@ class MainEngine:
                 for s in ah_data.get("stocks", []):
                     raw = str(s.get("price", "0")).replace(",", "").replace("+", "").replace("-", "")
                     try:
-                        afterhours_prices[s["code"]] = int(raw)
+                        p = int(raw)
+                        afterhours_prices[s["code"]] = p
+                        afterhours_info[s["code"]] = {
+                            "price":       p,
+                            "change_rate": float(s.get("change_rate", 0)),
+                            "vol_ratio":   float(s.get("vol_ratio", 0)),
+                        }
                     except Exception:
                         pass
         except Exception as e:
@@ -921,7 +929,36 @@ class MainEngine:
                     continue
                 log.info(f"NXT 적격 확인: {name}({code})")
 
-            # 진입가: 시간외 단일가 → 전일 종가 fallback
+            # ── 갭 크기 기반 예산 조정 (시간외 상관성 핵심 로직) ──────
+            # 전일 종가 대비 시간외 등락률에 따라 매수 전략 차별화
+            #   3~8%  : 최적 (추가 상승 여력 충분)  → 정상 예산
+            #   8~15% : 주의 (차익실현 리스크 증가) → 예산 50%
+            #   15%+  : 위험 (갭 과도, 정규장 매물 폭증 예상) → 스킵
+            #   0~3%  : 신호 약함 → 뉴스/정책 트리거 강할 때만 진행
+            ah_info   = afterhours_info.get(code) or {}
+            # candidates.json의 change_rate 우선, afterhours_info 보조
+            gap_rate  = float(s.get("change_rate") or ah_info.get("change_rate") or 0)
+            vol_ratio = float(s.get("vol_ratio")   or ah_info.get("vol_ratio")   or 0)
+
+            if gap_rate >= 15.0:
+                log.warning(f"갭 필터: {name} 갭 {gap_rate:.1f}% 과도 → 스킵 (정규장 차익매물 위험)")
+                asyncio.run(self.notifier.send(
+                    f"⚠️ <b>NXT 갭 과도 스킵</b>\n"
+                    f"종목: {name} ({code})\n"
+                    f"갭: {gap_rate:.1f}% → 15% 초과, 정규장 차익매물 위험"
+                ))
+                continue
+            elif gap_rate >= 8.0:
+                stock_budget_ratio = s.get("budget_ratio", 0.5)
+                log.info(f"갭 주의: {name} 갭 {gap_rate:.1f}% → 예산 {stock_budget_ratio*100:.0f}% 투입")
+            else:
+                stock_budget_ratio = s.get("budget_ratio", 1.0)
+                if gap_rate > 0:
+                    log.info(f"갭 정상: {name} 갭 {gap_rate:.1f}% / 거래량비율 {vol_ratio:.1f}배 → 전액 투입")
+
+            stock_budget = per_stock * stock_budget_ratio
+
+            # ── 진입가: 시간외 단일가 → 전일 종가 fallback ────────────
             price = afterhours_prices.get(code, 0)
             if not price:
                 ohlcv = get_stock_ohlcv(code, 5)
@@ -932,7 +969,7 @@ class MainEngine:
                 log.info(f"{name}: 시간외 가격 없음 → 전일 종가 {price:,}원 사용")
 
             # NXT 즉시매수 (장전거래 전용, TWAP/분할 없음)
-            result = self.executor.nxt_buy(code, name, per_stock, price)
+            result = self.executor.nxt_buy(code, name, stock_budget, price)
             if result.status in ("FILLED", "PARTIAL"):
                 self.portfolio.add_holding(
                     code, name, "nxt", "NXT",
