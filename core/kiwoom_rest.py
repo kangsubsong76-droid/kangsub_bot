@@ -456,23 +456,25 @@ class KiwoomRestAPI:
 
     def buy_premarket(self, code: str, qty: int, price: int) -> dict | None:
         """
-        장전 시간외 단일가 매수 (kt10000, trde_tp=61)
-        — NXT 08:00 전용 (코스피/코스닥 모두 지원)
-        — 장전시간외는 단일가이므로 반드시 가격(ord_uv) 입력 필요
+        장전 시간외 종가 매수 (kt10000, trde_tp=61)
+        — 07:30~08:30 장전시간외 종가매매 전용 (코스피/코스닥 모두 지원)
+        — trde_tp=61: 전일 종가로 자동 거래 → ord_uv 반드시 공백 ("") 입력
+          가격 지정 시 Kiwoom 오류: [2000](571557:장개시전 시간외종가 주문시에는 단가를 입력하지 않습니다)
+        — price 파라미터는 수량 계산/로그용으로만 사용, 실제 주문에는 미전송
         """
         body = {
             "dmst_stex_tp": "KRX",
             "stk_cd":  code.zfill(6),
             "ord_qty": str(qty),
-            "ord_uv":  str(price),   # 장전시간외 단일가 — 시간외 단일가 입력
-            "trde_tp": "61",         # 61=장전시간외
+            "ord_uv":  "",           # 장전시간외 종가 — 단가 입력 금지 (전일 종가 자동 적용)
+            "trde_tp": "61",         # 61=장전시간외 종가
             "cond_uv": "",
         }
         data = self._post("/api/dostk/ordr", body, "kt10000")
         if data and data.get("return_code") == 0:
-            log.info(f"매수(장전시간외) 완료: {code} {qty}주 @{price:,}원 — 주문번호: {data.get('ord_no')}")
+            log.info(f"매수(장전시간외) 완료: {code} {qty}주 @전일종가 — 주문번호: {data.get('ord_no')}")
         else:
-            log.error(f"매수(장전시간외) 실패: {code} {qty}주 @{price:,}원 — {data.get('return_msg') if data else '응답없음'}")
+            log.error(f"매수(장전시간외) 실패: {code} {qty}주 — {data.get('return_msg') if data else '응답없음'}")
         return data
 
     def sell_premarket(self, code: str, qty: int, price: int) -> dict | None:

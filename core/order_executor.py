@@ -113,8 +113,10 @@ class OrderExecutor:
         return OrderResult(code, name, "SELL", 0, 0, 0, "FAILED", [])
 
     def _calc_qty(self, amount: float, price: float) -> int:
-        """주문금액 / 주가 → 수량 (100주 단위 아님, 1주 단위)"""
-        if price <= 0:
+        """주문금액 / 주가 → 수량 (100주 단위 아님, 1주 단위)
+        amount=0 이면 0 반환 (예산 없을 때 주문 차단)
+        """
+        if price <= 0 or amount <= 0:
             return 0
         return max(1, int(amount / price))
 

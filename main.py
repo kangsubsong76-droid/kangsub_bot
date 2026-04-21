@@ -890,6 +890,16 @@ class MainEngine:
 
         log.info(f"NXT 예산: {cash_avail:,.0f}원 / {len(stocks)}종목 / 종목당: {per_stock:,.0f}원")
 
+        # 예산 부족 조기 종료 — portfolio.cash가 0이면 전량 스킵 방지
+        if cash_avail <= 0:
+            log.warning(f"NXT 매수 중단: 가용 현금 {self.portfolio.cash:,.0f}원 / 예산한도 {nxt_budget:,.0f}원 → 현금 부족")
+            asyncio.run(self.notifier.send(
+                f"⚠️ NXT 매수 불가\n"
+                f"현금 잔고: {self.portfolio.cash:,.0f}원\n"
+                f"portfolio.json 현금 확인 필요"
+            ))
+            return
+
         bought_list = []   # 텔레그램 요약용
 
         for s in stocks:
