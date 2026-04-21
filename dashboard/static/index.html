@@ -278,10 +278,10 @@ tr:hover td { background: rgba(58,142,255,.05); }
       </div>
 
       <table>
-        <colgroup><col style="width:24px"><col><col style="width:48px"><col style="width:48px"><col style="width:48px"></colgroup>
-        <thead><tr><th>#</th><th>종목명</th><th>신뢰도</th><th class="r">시간외</th><th class="r">거래량</th></tr></thead>
+        <colgroup><col style="width:24px"><col><col style="width:42px"><col style="width:44px"><col style="width:54px"><col style="width:36px"></colgroup>
+        <thead><tr><th>#</th><th>종목명</th><th>신뢰도</th><th class="r">시간외</th><th>갭존 / 비율</th><th class="r">거래량</th></tr></thead>
         <tbody id="nxt-tbody">
-          <tr><td colspan="5"><div class="empty dot3">분석 대기중</div></td></tr>
+          <tr><td colspan="6"><div class="empty dot3">분석 대기중</div></td></tr>
         </tbody>
       </table>
 
@@ -666,12 +666,31 @@ async function loadNXT() {
     tbody.innerHTML = stocks.map(s => {
       const chg = s.change_rate != null ? pct(s.change_rate) : '--';
       const vol = s.vol_ratio != null ? s.vol_ratio + 'x' : '--';
+      // 갭존 분류 (gap_rate 우선, 없으면 change_rate 사용)
+      const gap = s.gap_rate ?? s.change_rate ?? 0;
+      let gapLabel, gapStyle;
+      if (gap >= 15) {
+        gapLabel = '스킵';
+        gapStyle = 'background:rgba(255,63,94,.15);color:var(--down);border-color:rgba(255,63,94,.3)';
+      } else if (gap >= 8) {
+        gapLabel = '주의';
+        gapStyle = 'background:rgba(240,165,0,.12);color:var(--mid);border-color:rgba(240,165,0,.35)';
+      } else if (gap >= 3) {
+        gapLabel = '최적';
+        gapStyle = 'background:rgba(0,204,118,.1);color:var(--up);border-color:rgba(0,204,118,.3)';
+      } else {
+        gapLabel = '약신호';
+        gapStyle = 'background:rgba(58,142,255,.1);color:var(--blue);border-color:rgba(58,142,255,.25)';
+      }
+      const ratio = s.budget_ratio != null ? Math.round(s.budget_ratio * 100) + '%' : '--';
       return `<tr>
         <td class="rk">${s.rank ?? ''}</td>
         <td style="font-weight:700">${s.name ?? '--'}<br>
           <span style="font-size:9px;color:var(--muted)">${s.code ?? ''}</span></td>
         <td class="conf-${s.confidence ?? ''}">${s.confidence ?? '--'}</td>
         <td class="r pos">${chg}</td>
+        <td><span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;border:1px solid;${gapStyle}">${gapLabel}</span>
+          <span style="font-size:9px;color:var(--muted);margin-left:2px">${ratio}</span></td>
         <td class="r" style="color:var(--blue)">${vol}</td>
       </tr>`;
     }).join('');
@@ -720,12 +739,25 @@ async function loadAfterHours() {
     list.innerHTML = '<div class="empty">07:30 수집 대기중</div>';
     return;
   }
-  list.innerHTML = stocks.slice(0, 8).map(s => `<div class="arow">
-    <span class="arow-name">${s.name ?? '--'}</span>
-    <span class="arow-mkt">${(s.market ?? '').slice(0,3)}</span>
-    <span class="arow-chg pos">+${s.change_rate ?? '--'}%</span>
-    <span class="arow-vol">${s.vol_ratio ?? '--'}x</span>
-  </div>`).join('');
+  list.innerHTML = stocks.slice(0, 8).map(s => {
+    const rate = s.change_rate ?? 0;
+    // 갭존별 색상: 3~8% 초록(최적), 8~15% 금색(주의), 15%+ 빨강(스킵), 1~3% 파랑(약신호)
+    let chgColor;
+    if (rate >= 15)     chgColor = 'var(--down)';
+    else if (rate >= 8) chgColor = 'var(--mid)';
+    else                chgColor = 'var(--up)';
+    // 갭존 레이블 (vol_ratio 뒤에 소형 배지)
+    let zoneMark = '';
+    if (rate >= 15)     zoneMark = ' <span style="font-size:8px;color:var(--down)">⊘스킵</span>';
+    else if (rate >= 8) zoneMark = ' <span style="font-size:8px;color:var(--mid)">△주의</span>';
+    else if (rate >= 3) zoneMark = ' <span style="font-size:8px;color:var(--up)">●최적</span>';
+    return `<div class="arow">
+      <span class="arow-name">${s.name ?? '--'}</span>
+      <span class="arow-mkt">${(s.market ?? '').slice(0,3)}</span>
+      <span class="arow-chg" style="color:${chgColor}">${rate >= 0 ? '+' : ''}${rate ?? '--'}%</span>
+      <span class="arow-vol">${s.vol_ratio ?? '--'}x${zoneMark}</span>
+    </div>`;
+  }).join('');
 }
 
 /* ── 시스템 상태 ────────────────────────────────────── */
@@ -832,6 +864,14 @@ async function loadTradingPlan() {
     if (nxt.nasdaq_change != null) txt += ` | 나스닥 ${nxt.nasdaq_change > 0 ? '+' : ''}${Number(nxt.nasdaq_change).toFixed(2)}%`;
     if (nxt.vix != null)           txt += ` | VIX ${nxt.vix}`;
     if (nxt.stop)                  txt += ' | ⛔ 매매중단';
+    // 갭존 요약
+    const gs = nxt.gap_summary || {};
+    const gParts = [];
+    if (gs.optimal)  gParts.push(`🟢최적 ${gs.optimal}`);
+    if (gs.caution)  gParts.push(`🟡주의 ${gs.caution}`);
+    if (gs.skip)     gParts.push(`🔴스킵 ${gs.skip}`);
+    if (gs.weak)     gParts.push(`🔵약신호 ${gs.weak}`);
+    if (gParts.length) txt += ` | 갭존: ${gParts.join(' ')}`;
     nmEl.textContent = txt;
   }
 
@@ -846,12 +886,19 @@ async function loadTradingPlan() {
       nxtEl.innerHTML = (nxt.stocks || []).map(s => {
         const chg = s.change_rate != null
           ? `${s.change_rate > 0 ? '+' : ''}${Number(s.change_rate).toFixed(2)}%` : '--';
-        const vol = s.volume_ratio != null ? `${Number(s.volume_ratio).toFixed(1)}x` : '--';
+        const vol = s.vol_ratio != null ? `${Number(s.vol_ratio).toFixed(1)}x` : '--';
         const cc  = s.confidence === 'HIGH' ? 'pos' : 'neu';
+        const gap = s.gap_rate ?? s.change_rate ?? 0;
+        let gapLabel, gapColor;
+        if (gap >= 15)      { gapLabel = '스킵';    gapColor = 'var(--down)'; }
+        else if (gap >= 8)  { gapLabel = '주의·50%'; gapColor = 'var(--mid)';  }
+        else if (gap >= 3)  { gapLabel = '최적·100%'; gapColor = 'var(--up)';  }
+        else                { gapLabel = '약신호·80%'; gapColor = 'var(--blue)'; }
         return `<div class="srow">
           <span class="srow-ico" style="color:var(--gold)">${s.rank}</span>
           <span class="srow-name">${s.name}</span>
           <span class="srow-time" style="color:var(--muted)">${chg} / ${vol}</span>
+          <span style="font-size:9px;color:${gapColor};margin-right:4px;font-weight:700">${gapLabel}</span>
           <span class="srow-st ${cc}">${s.confidence}</span>
         </div>`;
       }).join('');
@@ -861,7 +908,17 @@ async function loadTradingPlan() {
   if (nbEl) {
     const cnt = (nxt.stocks || []).length;
     if (cnt > 0 && !nxt.stop) {
-      nbEl.innerHTML = `⏰ <b>08:00 매수 예정</b> — ${cnt}종목 × ${num(nxt.per_stock || 0)}원 (총 ${num(nxt.budget || 0)}원)`;
+      const perStock = nxt.per_stock || 0;
+      // 갭 비율 적용 실효 예산 합산
+      const effective = (nxt.stocks || []).reduce((sum, s) => {
+        return sum + perStock * (s.budget_ratio ?? 1.0);
+      }, 0);
+      const hasGapAdj = (nxt.stocks || []).some(s => s.budget_ratio != null && s.budget_ratio !== 1.0);
+      if (hasGapAdj) {
+        nbEl.innerHTML = `⏰ <b>08:00 매수 예정</b> — ${cnt}종목 · 갭비율 적용 실효 ${num(Math.round(effective))}원 <span style="color:var(--muted)">(최대 ${num(nxt.budget || 0)}원)</span>`;
+      } else {
+        nbEl.innerHTML = `⏰ <b>08:00 매수 예정</b> — ${cnt}종목 × ${num(perStock)}원 (총 ${num(nxt.budget || 0)}원)`;
+      }
       nbEl.style.display = '';
     } else {
       nbEl.style.display = 'none';

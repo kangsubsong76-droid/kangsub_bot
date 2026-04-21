@@ -298,6 +298,21 @@ def api_trading_plan():
     nxt_budget    = round(min(cash, total_capital * 0.40))
     nxt_per_stock = round(nxt_budget / len(nxt_stocks)) if nxt_stocks else 0
 
+    # 갭 비율 적용 실효 예산 계산
+    nxt_effective = round(sum(
+        nxt_per_stock * float(s.get("budget_ratio") or 1.0)
+        for s in nxt_stocks
+    ))
+
+    # 갭존 분류 요약 (스킵/주의/최적/약신호 종목 수)
+    gap_summary = {"skip": 0, "caution": 0, "optimal": 0, "weak": 0}
+    for s in nxt_stocks:
+        g = float(s.get("gap_rate") or s.get("change_rate") or 0)
+        if g >= 15:      gap_summary["skip"] += 1
+        elif g >= 8:     gap_summary["caution"] += 1
+        elif g >= 3:     gap_summary["optimal"] += 1
+        else:            gap_summary["weak"] += 1
+
     return jsonify({
         "pam": {
             "signals":          signals[:10],   # BUY + HOLD 모두 포함
@@ -307,14 +322,17 @@ def api_trading_plan():
             "current_holdings": n_holdings,
         },
         "nxt": {
-            "stocks":        nxt_stocks,
-            "stop":          nxt_data.get("stop", False),
-            "nasdaq_change": nxt_data.get("nasdaq_change"),
-            "vix":           nxt_data.get("vix"),
-            "analysis_date": nxt_data.get("date", "-"),
-            "analysis_time": nxt_data.get("time", "-"),
-            "budget":        nxt_budget,
-            "per_stock":     nxt_per_stock,
+            "stocks":           nxt_stocks,
+            "stop":             nxt_data.get("stop", False),
+            "market_status":    nxt_data.get("market_status", "진행"),
+            "nasdaq_change":    nxt_data.get("nasdaq_change"),
+            "vix":              nxt_data.get("vix"),
+            "analysis_date":    nxt_data.get("date", "-"),
+            "analysis_time":    nxt_data.get("time", "-"),
+            "budget":           nxt_budget,
+            "per_stock":        nxt_per_stock,
+            "effective_budget": nxt_effective,
+            "gap_summary":      gap_summary,
         },
         "cash":          round(cash),
         "total_capital": total_capital,
