@@ -674,18 +674,61 @@ class MainEngine:
                 return
 
             stocks = candidates.get("stocks", []) if candidates else []
+
+            # ── STEP3: 장전거래 적격 필터링 (07:30에 사전 검증) ──────────
+            if stocks and self.kiwoom and not self.paper:
+                log.info("[07:30] NXT STEP3 — 장전거래 적격 필터링 시작")
+                eligible_stocks, skipped_stocks = [], []
+                for s in stocks:
+                    eligible, reason = self.kiwoom.is_nxt_eligible(s["code"])
+                    if eligible:
+                        eligible_stocks.append(s)
+                        log.info(f"  ✅ 적격: {s['name']}({s['code']})")
+                    else:
+                        skipped_stocks.append((s, reason))
+                        log.warning(f"  ❌ 부적격: {s['name']}({s['code']}) — {reason}")
+
+                # 부적격 종목 텔레그램 알림
+                if skipped_stocks:
+                    skip_lines = "\n".join(
+                        f"  ❌ {s['name']} ({s['code']}): {r}"
+                        for s, r in skipped_stocks
+                    )
+                    asyncio.run(self.notifier.send(
+                        f"⚠️ <b>NXT 적격 필터 결과</b>\n"
+                        f"━━━━━━━━━━━━━━━━━\n"
+                        f"부적격 제외:\n{skip_lines}"
+                    ))
+
+                # nxt_candidates.json을 적격 종목만으로 덮어쓰기
+                from surge_predictor.signal_analyzer import CANDIDATES_PATH
+                import json as _json
+                updated = dict(candidates)
+                updated["stocks"] = eligible_stocks
+                updated["filtered_at"] = datetime.now().strftime("%H:%M:%S")
+                CANDIDATES_PATH.write_text(
+                    _json.dumps(updated, ensure_ascii=False, indent=2),
+                    encoding="utf-8"
+                )
+                stocks = eligible_stocks
+                log.info(f"NXT 적격 필터 완료: {len(eligible_stocks)}/{len(candidates.get('stocks', []))}종목 통과")
+            else:
+                eligible_stocks = stocks
+
             if stocks:
                 stock_list = "\n".join(
                     f"  {s['rank']}. {s['name']} ({s['code']}) [{s['confidence']}]"
                     for s in stocks
                 )
                 asyncio.run(self.notifier.send(
-                    f"🔔 <b>NXT 예측 완료</b>\n"
+                    f"✅ <b>NXT 최종 매수 대상</b>\n"
                     f"━━━━━━━━━━━━━━━━━\n"
                     f"{stock_list}\n\n"
                     f"⏰ 08:00 장전거래 매수 예정"
                 ))
-            log.info(f"NXT 후보: {len(stocks)}종목")
+            else:
+                asyncio.run(self.notifier.send("🚫 NXT 적격 종목 없음 — 오늘 매수 없음"))
+            log.info(f"NXT 최종 후보: {len(stocks)}종목")
 
         except Exception as e:
             log.error(f"collect_afterhours 오류: {e}")
