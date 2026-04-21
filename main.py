@@ -1,6 +1,6 @@
 """
 KangSub Bot — 메인 실행 파일
-이재명 정부 정책 연계 7섹터 + 고배당 자동매매 시스템
+이재명 정부 정책 연계 10섹터 + 고배당 자동매매 시스템
 
 실행:
   python main.py             # 실전/페이퍼 모드 (settings.py 기반)
@@ -11,6 +11,9 @@ import sys
 import json
 import asyncio
 import argparse
+import subprocess
+import threading
+import time
 
 # Windows asyncio 이벤트 루프 정책 (signal 모듈 호환성)
 if sys.platform == 'win32':
@@ -132,11 +135,11 @@ class MainEngine:
         return news_scores
 
     def morning_briefing(self):
-        log.info("[08:30] 모닝 브리핑")
-        kospi_df = get_kospi_ohlcv(30)
+        log.info("[08:30] Morning briefing")
+        kospi_df  = get_kospi_ohlcv(30)
         usdkrw_df = get_usdkrw(7)
-        vkospi = get_vkospi()
-        market = analyze_market(kospi_df, vkospi, usdkrw_df) if not kospi_df.empty else None
+        vkospi    = get_vkospi()
+        market    = analyze_market(kospi_df, vkospi, usdkrw_df) if not kospi_df.empty else None
 
         # 뉴스 요약 (긍정 뉴스 top3)
         news_summary = ""
@@ -144,14 +147,26 @@ class MainEngine:
         for n in positive:
             news_summary += f"• {n.title[:40]}\n"
 
-        briefing = {
-            "kospi": f"{kospi_df['close'].iloc[-1]:,.2f}" if not kospi_df.empty else "-",
-            "market_status": f"{market.kospi_trend} / 점수 {market.score:.0f}" if market else "-",
-            "usdkrw": f"{usdkrw_df['close'].iloc[-1]:,.1f}" if not usdkrw_df.empty else "-",
-            "news_summary": news_summary or "수집된 뉴스 없음",
-            "trade_plan": self._get_trade_plan(),
+        # NXT 현황: 현재 보유 중인 nxt 카테고리 종목 수 + 투입금액
+        nxt_holdings = {
+            code: h for code, h in self.portfolio.holdings.items()
+            if getattr(h, "category", "") == "nxt"
         }
-        asyncio.run(self.notifier.send_morning_briefing(briefing))
+        nxt_invested = sum(
+            getattr(h, "avg_price", 0) * getattr(h, "quantity", 0)
+            for h in nxt_holdings.values()
+        )
+
+        briefing = {
+            "kospi":         f"{kospi_df['close'].iloc[-1]:,.2f}" if not kospi_df.empty else "-",
+            "market_status": f"{market.kospi_trend} / 점수 {market.score:.0f}" if market else "-",
+            "usdkrw":        f"{usdkrw_df['close'].iloc[-1]:,.1f}" if not usdkrw_df.empty else "-",
+            "news_summary":  news_summary or "수집된 뉴스 없음",
+            "trade_plan":    self._get_trade_plan(),
+            "nxt_stocks":    len(nxt_holdings),
+            "nxt_invested":  nxt_invested,
+        }
+        asyncio.run(self.notifier.send_morning_briefing_integrated(briefing))
 
     def start_realtime(self):
         log.info("[09:00] 실시간 시세 수신 시작")
@@ -161,41 +176,114 @@ class MainEngine:
         log.info("[15:30] 실시간 시세 수신 종료")
 
     def execute_buy_signals(self):
+        """
+        PAM Phase 2 — 09:00 매수 실행
+        ① 총 운용자본의 50% 이내 한도
+        ② 선택 종목 균등 배분 (예산 재배분 로직 포함)
+           - 고가 종목(1주 > 종목당 예산)은 스킵 후 예산을 나머지에 재배분
+           - 최대 2회 재배분 반복으로 예산 최대 활용
+        ③ 7종목 cap 확인
+        """
         if not self.auto_trading:
             return
-        log.info("[09:30] 매수 시그널 실행")
+        log.info("[09:00] PAM Phase 2 — 매수 실행")
+
+        from config.settings import PAM_BUY_RATIO, PAM_MAX_HOLDINGS, TOTAL_CAPITAL
         signals = self._generate_signals()
         buy_signals = [s for s in signals if s.action == "BUY"]
+        if not buy_signals:
+            log.info("매수 시그널 없음 — 매수 스킵")
+            return
 
-        for sig in buy_signals[:3]:  # 하루 최대 3종목 매수
-            code = sig.code
-            holding = self.portfolio.holdings.get(code)
-            stage = (holding.split_stage + 1) if holding else 1
-            if stage > 3:
-                continue
+        # 7종목 cap 확인
+        current_holdings = len(self.portfolio.holdings)
+        available_slots = PAM_MAX_HOLDINGS - current_holdings
+        if available_slots <= 0:
+            log.info(f"7종목 cap 도달 ({current_holdings}종목) — 매수 불가")
+            asyncio.run(self.notifier.send(
+                f"⚠️ 보유 종목 {current_holdings}개로 7종목 cap 도달 — 신규 매수 없음"
+            ))
+            return
 
-            # 섹터 예산 계산
-            from config.universe import get_stock_name
-            sector = self._get_sector(code)
-            budget = self.portfolio.calc_sector_budget(sector) if sector else 0
+        # 이미 보유 중인 종목 제외
+        new_signals = [s for s in buy_signals if s.code not in self.portfolio.holdings]
+        candidates = new_signals[:min(5, available_slots)]  # 최대 5종목 선정
 
-            if budget > 0 and self.portfolio.cash > 0:
+        if not candidates:
+            log.info("신규 매수 가능 종목 없음")
+            return
+
+        # 총 매수 한도
+        # 최초 매수 (보유종목 0): 한도 없이 현금 전액 사용 가능
+        # 추가 매수 (보유종목 있음): 총 운용자본의 50% 이내 제한
+        is_first_buy = (current_holdings == 0)
+        if is_first_buy:
+            cash_available = self.portfolio.cash
+            log.info("최초 매수 — 50% 한도 미적용, 현금 전액 사용 가능")
+        else:
+            total_buy_limit = TOTAL_CAPITAL * PAM_BUY_RATIO  # 250만원
+            cash_available = min(self.portfolio.cash, total_buy_limit)
+            log.info(f"추가 매수 — 50% 한도 적용 ({total_buy_limit:,.0f}원)")
+
+        # ── 예산 재배분 로직 ──
+        # 1회차: 균등 배분 → 1주도 못 사는 종목 제외 → 2회차 재배분
+        codes_to_buy = [s.code for s in candidates]
+        for _ in range(3):  # 최대 3회 재배분 반복
+            per_stock = cash_available / len(codes_to_buy) if codes_to_buy else 0
+            skippable = []
+            for code in codes_to_buy:
                 ohlcv = get_stock_ohlcv(code, 5)
                 if ohlcv.empty:
+                    skippable.append(code)
                     continue
                 price = ohlcv["close"].iloc[-1]
-                result = self.executor.split_buy(code, sig.name, budget, price, stage)
-                if result.status in ("FILLED", "PARTIAL"):
-                    cat = "dividend" if code in self._get_all_dividend_codes() else "general"
-                    self.portfolio.add_holding(code, sig.name, cat, sector or "", result.avg_price, result.total_qty, stage)
-                    trade_data = {
-                        "code": code, "name": sig.name, "side": "매수",
-                        "qty": result.total_qty, "price": result.avg_price,
-                        "amount": result.total_amount,
-                        "trigger": "시그널", "reason": " | ".join(sig.reasons[:2]),
-                    }
-                    asyncio.run(self.notifier.send_trade_alert(trade_data))
-                    self.notion.log_trade(trade_data)
+                if price > per_stock:
+                    skippable.append(code)
+            if not skippable:
+                break  # 모든 종목 매수 가능 → 재배분 완료
+            codes_to_buy = [c for c in codes_to_buy if c not in skippable]
+            if not codes_to_buy:
+                log.warning("모든 종목 고가로 매수 불가 — 예산 부족")
+                asyncio.run(self.notifier.send(
+                    f"⚠️ 전 종목 1주 가격 > 종목당 예산 ({per_stock:,.0f}원) — 매수 불가"
+                ))
+                return
+
+        # ── 실제 매수 실행 ──
+        per_stock_final = cash_available / len(codes_to_buy)
+        sig_map = {s.code: s for s in candidates}
+        bought_count = 0
+
+        log.info(f"매수 대상: {len(codes_to_buy)}종목 / 종목당 예산: {per_stock_final:,.0f}원")
+
+        for code in codes_to_buy:
+            sig = sig_map[code]
+            ohlcv = get_stock_ohlcv(code, 5)
+            if ohlcv.empty:
+                continue
+            price = ohlcv["close"].iloc[-1]
+            qty = int(per_stock_final // price)
+            if qty == 0:
+                log.warning(f"{sig.name}: 1주({price:,.0f}원) > 예산({per_stock_final:,.0f}원) — 스킵")
+                continue
+
+            result = self.executor.split_buy(code, sig.name, per_stock_final, price, 1)
+            if result.status in ("FILLED", "PARTIAL"):
+                sector = self._get_sector(code)
+                cat = "dividend" if code in self._get_all_dividend_codes() else "general"
+                self.portfolio.add_holding(code, sig.name, cat, sector or "", result.avg_price, result.total_qty, 1)
+                trade_data = {
+                    "code": code, "name": sig.name, "side": "매수",
+                    "qty": result.total_qty, "price": result.avg_price,
+                    "amount": result.total_amount,
+                    "trigger": "PAM Phase2", "reason": " | ".join(sig.reasons[:2]),
+                }
+                asyncio.run(self.notifier.send_trade_alert(trade_data))
+                self.notion.log_trade(trade_data)
+                bought_count += 1
+
+        log.info(f"PAM Phase 2 완료: {bought_count}종목 매수, "
+                 f"현금 잔고 {self.portfolio.cash:,.0f}원")
 
     def monitor_stop_loss(self):
         if not self.portfolio.holdings:
@@ -245,17 +333,34 @@ class MainEngine:
     def save_portfolio_snapshot(self):
         summary = self.portfolio.get_summary()
         self.notion.log_portfolio_snapshot({
-            "total_value": summary["total_value"],
-            "total_pnl": summary["total_pnl"],
-            "daily_pnl": 0,  # TODO: 전일 대비 계산
-            "cash": summary["cash"],
+            "total_value":   summary["total_value"],
+            "total_pnl":     summary["total_pnl"],
+            "daily_pnl":     0,
+            "cash":          summary["cash"],
             "general_ratio": summary["general_value"] / summary["total_value"] if summary["total_value"] else 0,
-            "dividend_ratio": summary["dividend_value"] / summary["total_value"] if summary["total_value"] else 0,
+            "dividend_ratio":summary["dividend_value"] / summary["total_value"] if summary["total_value"] else 0,
         })
         # 대시보드용 JSON 저장
-        path = DATA_DIR / "portfolio.json"
+        path = DATA_DIR / "portfolio_snapshot.json"
         path.write_text(json.dumps({**summary, "total_capital": self.portfolio.total_capital}, ensure_ascii=False, indent=2))
-        log.info("포트폴리오 스냅샷 저장 완료")
+        self.portfolio._save()
+        log.info("Portfolio snapshot saved")
+
+        # 15:40 텔레그램 — 정규장 마감 스냅샷
+        holdings_detail = []
+        for code, h in self.portfolio.holdings.items():
+            if getattr(h, "category", "") == "nxt":
+                continue  # NXT는 이미 10:30에 청산됨
+            try:
+                from data.market_data import get_stock_ohlcv as _ohlcv
+                df = _ohlcv(code, 5)
+                current = df["close"].iloc[-1] if not df.empty else getattr(h, "avg_price", 0)
+            except Exception:
+                current = getattr(h, "avg_price", 0)
+            avg  = getattr(h, "avg_price", 0)
+            pnl_pct = (current - avg) / avg * 100 if avg else 0
+            holdings_detail.append({"name": getattr(h, "name", code), "pnl_pct": pnl_pct})
+        asyncio.run(self.notifier.send_market_close_snapshot(summary, holdings_detail))
 
     def check_dart_disclosures(self):
         log.info("[16:00] DART 공시 체크")
@@ -291,27 +396,212 @@ class MainEngine:
 
     def daily_report(self):
         summary = self.portfolio.get_summary()
-        trades = self._load_today_trades()
+        trades  = self._load_today_trades()
+
+        # NXT 거래 집계
+        nxt_trades = [t for t in trades if t.get("trigger", "").startswith("NXT")
+                      and t.get("side") in ("NXT청산", "NXT손절")]
+        nxt_pnl    = sum(t.get("pnl", 0) for t in nxt_trades if "pnl" in t)
+
         report = {
-            "total_value": summary["total_value"],
-            "daily_pnl": 0,
-            "total_pnl": summary["total_pnl"],
-            "cash": summary["cash"],
-            "num_holdings": summary["num_holdings"],
-            "buys": sum(1 for t in trades if t.get("side") == "매수"),
-            "sells": sum(1 for t in trades if "매도" in t.get("side", "")),
+            "total_value":       summary["total_value"],
+            "daily_pnl":         0,
+            "total_pnl":         summary["total_pnl"],
+            "cash":              summary["cash"],
+            "num_holdings":      summary["num_holdings"],
+            "buys":              sum(1 for t in trades if t.get("side") == "매수"),
+            "sells":             sum(1 for t in trades if "매도" in t.get("side", "")),
+            "realized_pnl":      sum(t.get("pnl", 0) for t in trades if "pnl" in t),
+            "nxt_realized_pnl":  nxt_pnl,
+            "nxt_trade_count":   len(nxt_trades),
         }
-        asyncio.run(self.notifier.send_daily_report(report))
+        asyncio.run(self.notifier.send_daily_report_integrated(report))
 
     def midday_report(self):
         summary = self.portfolio.get_summary()
-        msg = (
-            f"🕛 <b>중간 현황</b>\n"
-            f"총 평가: {summary['total_value']:,.0f}원\n"
-            f"수익률: {summary['total_pnl']:+.1%}\n"
-            f"보유: {summary['num_holdings']}종목"
-        )
-        asyncio.run(self.notifier.send(msg))
+        trades  = self._load_today_trades()
+
+        # 오늘 NXT 청산 내역 집계
+        nxt_close_trades = [
+            t for t in trades
+            if t.get("trigger", "").startswith("NXT")
+            and t.get("side") in ("NXT청산", "NXT손절")
+        ]
+        nxt_pnl = sum(t.get("pnl", 0) for t in nxt_close_trades if "pnl" in t)
+
+        # 종목별 수익률 계산 (청산 거래 기준)
+        nxt_result_trades = []
+        for t in nxt_close_trades:
+            buy_price  = t.get("buy_price", t.get("price", 0))
+            sell_price = t.get("price", 0)
+            chg = (sell_price - buy_price) / buy_price * 100 if buy_price else 0
+            nxt_result_trades.append({"name": t.get("name", "?"), "change_pct": chg})
+
+        nxt_result = {
+            "realized_pnl": nxt_pnl,
+            "trades":       nxt_result_trades,
+        }
+        asyncio.run(self.notifier.send_midday_integrated(summary, nxt_result))
+
+    def sync_manual_portfolio_prices(self):
+        """
+        portfolio_manual.json 현재가 자동 동기화
+        — 장 시작(09:00), 장 마감 후(15:40) 스케줄러에서 호출
+        — Kiwoom ka10001 로 각 종목 현재가 조회 후 평가금액/손익 갱신
+        """
+        from config.settings import DATA_DIR as _DATA_DIR
+        manual_path = _DATA_DIR / "store" / "portfolio_manual.json"
+        if not manual_path.exists():
+            log.info("portfolio_manual.json 없음 — 동기화 스킵")
+            return
+        try:
+            data = json.loads(manual_path.read_text(encoding="utf-8"))
+            holdings = data.get("holdings", [])
+            if not holdings:
+                return
+
+            total_value = 0
+            total_capital = data.get("total_capital", 30_000_000)
+            synced = 0
+            for h in holdings:
+                code = h.get("code", "")
+                if not code:
+                    continue
+                # ka10001 현재가 조회
+                info = self.kiwoom.get_stock_info(code) if self.kiwoom else None
+                if info and info.get("price", 0) > 0:
+                    cur = info["price"]
+                    h["current_price"] = cur
+                    synced += 1
+                else:
+                    cur = h.get("current_price", h.get("avg_price", 0))
+                avg = h.get("avg_price", 0)
+                qty = h.get("qty", 0)
+                value      = cur * qty
+                pnl_amount = (cur - avg) * qty
+                pnl_pct    = (cur - avg) / avg * 100 if avg else 0
+                h["value"]      = round(value)
+                h["pnl_amount"] = round(pnl_amount)
+                h["pnl_pct"]    = round(pnl_pct, 2)
+                total_value += value
+
+            total_pnl_amount = sum(h.get("pnl_amount", 0) for h in holdings)
+            data["total_value"]   = round(total_value)
+            data["total_pnl"]     = round(total_pnl_amount / total_value * 100, 2) if total_value else 0
+            data["total_pnl_pct"] = data["total_pnl"]
+            data["num_holdings"]  = len(holdings)
+            data["updated_at"]    = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            manual_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            log.info(f"portfolio_manual.json sync done: {synced}/{len(holdings)} prices updated, total={total_value:,.0f}KRW")
+
+            # PortfolioManager 현재가도 갱신
+            for h in holdings:
+                code = h.get("code", "")
+                if code in self.portfolio.holdings:
+                    self.portfolio.holdings[code].current_price = h.get("current_price", 0)
+
+        except Exception as e:
+            log.error(f"sync_manual_portfolio_prices error: {e}")
+
+    def reconcile_portfolio(self):
+        """
+        실 API 데이터 vs portfolio_manual.json 대조 검증
+        — 09:10, 15:45 스케줄러에서 호출
+        — 현금 또는 총평가 차이 1% 초과 시 텔레그램 경고 + 자동 수정
+
+        검증 흐름:
+          1) ka01002 (get_portfolio_holdings) 로 실 계좌 조회
+          2) portfolio_manual.json 값과 비교
+          3) 차이 > 1% → 자동 수정 + 텔레그램 알림
+          4) 차이 ≤ 1% → "일치 확인" 로그만
+        """
+        from config.settings import DATA_DIR as _DATA_DIR
+        manual_path = _DATA_DIR / "store" / "portfolio_manual.json"
+        if not manual_path.exists():
+            log.info("reconcile: portfolio_manual.json 없음 — 스킵")
+            return
+
+        try:
+            manual = json.loads(manual_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            log.error(f"reconcile: manual 파일 읽기 실패 — {e}")
+            return
+
+        manual_total = manual.get("total_value", 0)
+        manual_cash  = manual.get("cash", 0)
+
+        # ── ka01002 실 API 조회 ──
+        api_data = None
+        if self.kiwoom:
+            try:
+                api_data = self.kiwoom.get_portfolio_holdings()
+            except Exception as e:
+                log.warning(f"reconcile: ka01002 조회 실패 — {e}")
+
+        if not api_data or api_data.get("total_value", 0) == 0:
+            log.info("reconcile: API 데이터 없음 — 검증 스킵")
+            return
+
+        api_total = api_data.get("total_value", 0)
+        api_cash  = api_data.get("cash", 0)
+
+        # ── 차이 계산 ──
+        total_diff     = api_total - manual_total
+        total_diff_pct = abs(total_diff) / api_total * 100 if api_total else 0
+        cash_diff      = api_cash - manual_cash if api_cash else 0
+        cash_diff_abs  = abs(cash_diff)
+
+        mismatch = total_diff_pct > 1.0 or cash_diff_abs > 50_000
+
+        lines = [
+            f"🔍 <b>포트폴리오 대조 검증</b>",
+            f"{'⚠️ 불일치' if mismatch else '✅ 일치'} | {datetime.now():%H:%M}",
+            f"",
+            f"<b>총평가</b>",
+            f"  API    : {api_total:>12,.0f}원",
+            f"  수동   : {manual_total:>12,.0f}원",
+            f"  차이   : {total_diff:>+12,.0f}원  ({total_diff_pct:.1f}%)",
+        ]
+        if api_cash:
+            lines += [
+                f"",
+                f"<b>현금</b>",
+                f"  API    : {api_cash:>12,.0f}원",
+                f"  수동   : {manual_cash:>12,.0f}원",
+                f"  차이   : {cash_diff:>+12,.0f}원",
+            ]
+
+        if mismatch:
+            # ── 자동 수정 ──
+            if api_cash:
+                manual["cash"] = api_cash
+            manual["total_value"] = api_total
+
+            api_holdings = api_data.get("holdings", [])
+            if api_holdings:
+                manual["holdings"]     = api_holdings
+                manual["num_holdings"] = len(api_holdings)
+
+            manual["updated_at"]    = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            manual["reconciled_at"] = manual["updated_at"]
+            manual_path.write_text(
+                json.dumps(manual, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            lines.append(f"")
+            lines.append(f"🔧 portfolio_manual.json 자동 수정 완료")
+            log.warning(
+                f"reconcile: 불일치 수정 — total_diff={total_diff:+,.0f}원 ({total_diff_pct:.1f}%), "
+                f"cash_diff={cash_diff:+,.0f}원"
+            )
+        else:
+            log.info(
+                f"reconcile OK: api={api_total:,.0f} manual={manual_total:,.0f} "
+                f"diff={total_diff_pct:.2f}%"
+            )
+
+        asyncio.run(self.notifier.send("\n".join(lines)))
 
     def pre_close_check(self):
         log.info("[14:50] 마감 전 확인")
@@ -355,9 +645,332 @@ class MainEngine:
             for s in signals
         ], ensure_ascii=False, indent=2))
 
+    # ── NXT 전략 (장전거래 08:00) ──────────────────────────
+
+    def collect_afterhours(self):
+        """[07:30] 시간외 단일가 수집 → Claude 분석 → NXT 후보 확정"""
+        log.info("[07:30] NXT STEP1 — 시간외 수집 시작")
+        try:
+            from surge_predictor.afterhours_collector import run as collect
+            result = collect()
+            if not result or result.get("count", 0) == 0:
+                log.warning("시간외 종목 없음 — Claude 직접 분석으로 전환")
+
+            log.info("[07:30] NXT STEP2 — Claude 시그널 분석")
+            from surge_predictor.signal_analyzer import run as analyze
+            analysis = analyze()
+
+            if not analysis:
+                asyncio.run(self.notifier.send("⚠️ NXT 분석 실패 — 오늘 NXT 매수 없음"))
+                return
+
+            candidates = analysis.get("candidates", {})
+            if candidates and candidates.get("stop"):
+                asyncio.run(self.notifier.send(
+                    f"🚫 NXT 매매 중단\n"
+                    f"사유: 나스닥 {candidates.get('nasdaq_change', 0):+.2f}% / "
+                    f"VIX {candidates.get('vix', 0):.1f}"
+                ))
+                return
+
+            stocks = candidates.get("stocks", []) if candidates else []
+            if stocks:
+                stock_list = "\n".join(
+                    f"  {s['rank']}. {s['name']} ({s['code']}) [{s['confidence']}]"
+                    for s in stocks
+                )
+                asyncio.run(self.notifier.send(
+                    f"🔔 <b>NXT 예측 완료</b>\n"
+                    f"━━━━━━━━━━━━━━━━━\n"
+                    f"{stock_list}\n\n"
+                    f"⏰ 08:00 장전거래 매수 예정"
+                ))
+            log.info(f"NXT 후보: {len(stocks)}종목")
+
+        except Exception as e:
+            log.error(f"collect_afterhours 오류: {e}")
+            asyncio.run(self.notifier.send(f"⚠️ NXT 수집 오류: {e}"))
+
+    def execute_nxt_buy(self):
+        """[08:00] NXT 장전거래 즉시 매수 — 총 예산의 40% 사용
+
+        핵심 변경사항:
+        - split_buy(TWAP, 09:30~15:00 전용) → nxt_buy(즉시매수, 장전거래용)
+        - 예산 전액 1회 투입 (분할 없음)
+        - 시간외 단일가 가격 우선 사용 (없으면 전일 종가 fallback)
+        """
+        if not self.auto_trading:
+            return
+        log.info("[08:00] NXT 매수 실행")
+
+        from config.settings import TOTAL_CAPITAL, NXT_BUDGET_RATIO, NXT_MAX_STOCKS
+
+        # 후보 종목 로드
+        candidates_path = DATA_DIR / "nxt_candidates.json"
+        if not candidates_path.exists():
+            log.info("NXT 후보 없음 — 매수 스킵")
+            return
+
+        try:
+            import json as _json
+            candidates = _json.loads(candidates_path.read_text(encoding="utf-8-sig"))
+        except Exception as e:
+            log.error(f"NXT 후보 로드 실패: {e}")
+            return
+
+        if candidates.get("stop") or not candidates.get("stocks"):
+            log.info("NXT 매매 중단 또는 후보 없음 — 스킵")
+            return
+
+        # 날짜 확인 — 오늘 분석된 후보인지 검증
+        today = datetime.now().strftime("%Y-%m-%d")
+        if candidates.get("date", "") != today:
+            log.warning(f"NXT 후보 날짜 불일치: {candidates.get('date')} ≠ {today} — 오늘 07:30 분석 미실행 가능성")
+            asyncio.run(self.notifier.send(
+                f"⚠️ NXT 후보 날짜 불일치\n"
+                f"후보날짜: {candidates.get('date', '없음')} / 오늘: {today}\n"
+                f"07:30 수집이 정상 실행됐는지 확인하세요"
+            ))
+            return
+
+        # 시간외 가격 맵 로드 (afterhours_result.json → code: price)
+        afterhours_prices = {}
+        try:
+            ah_path = DATA_DIR / "afterhours_result.json"
+            if ah_path.exists():
+                ah_data = _json.loads(ah_path.read_text(encoding="utf-8-sig"))
+                for s in ah_data.get("stocks", []):
+                    raw = str(s.get("price", "0")).replace(",", "").replace("+", "").replace("-", "")
+                    try:
+                        afterhours_prices[s["code"]] = int(raw)
+                    except Exception:
+                        pass
+        except Exception as e:
+            log.warning(f"시간외 가격 로드 실패: {e}")
+
+        # NXT 예산 계산 (총 운용자본의 40%, 현금 초과 불가)
+        nxt_budget = TOTAL_CAPITAL * NXT_BUDGET_RATIO   # 1000만 × 0.40 = 400만원
+        cash_avail = min(self.portfolio.cash, nxt_budget)
+        stocks     = candidates["stocks"][:NXT_MAX_STOCKS]
+        per_stock  = cash_avail / len(stocks) if stocks else 0
+
+        log.info(f"NXT 예산: {cash_avail:,.0f}원 / {len(stocks)}종목 / 종목당: {per_stock:,.0f}원")
+
+        bought_list = []   # 텔레그램 요약용
+
+        for s in stocks:
+            code, name = s["code"], s["name"]
+            if code in self.portfolio.holdings:
+                log.info(f"{name} 이미 보유 — 스킵")
+                continue
+
+            # ── NXT 장전거래(08:00~08:50) 적격 여부 확인 ──
+            if self.kiwoom and not self.paper:
+                eligible, reason = self.kiwoom.is_nxt_eligible(code)
+                if not eligible:
+                    log.warning(f"NXT 부적격 종목 스킵: {name}({code}) — {reason}")
+                    asyncio.run(self.notifier.send(
+                        f"⚠️ <b>NXT 매수 스킵</b>\n"
+                        f"종목: {name} ({code})\n"
+                        f"사유: {reason}"
+                    ))
+                    continue
+                log.info(f"NXT 적격 확인: {name}({code})")
+
+            # 진입가: 시간외 단일가 → 전일 종가 fallback
+            price = afterhours_prices.get(code, 0)
+            if not price:
+                ohlcv = get_stock_ohlcv(code, 5)
+                if ohlcv.empty:
+                    log.warning(f"{name}: 가격 데이터 없음 — 스킵")
+                    continue
+                price = int(ohlcv["close"].iloc[-1])
+                log.info(f"{name}: 시간외 가격 없음 → 전일 종가 {price:,}원 사용")
+
+            # NXT 즉시매수 (장전거래 전용, TWAP/분할 없음)
+            result = self.executor.nxt_buy(code, name, per_stock, price)
+            if result.status in ("FILLED", "PARTIAL"):
+                self.portfolio.add_holding(
+                    code, name, "nxt", "NXT",
+                    result.avg_price, result.total_qty, 1
+                )
+                trade_data = {
+                    "code": code, "name": name, "side": "NXT매수",
+                    "qty": result.total_qty, "price": result.avg_price,
+                    "amount": result.total_amount,
+                    "trigger": "NXT Phase1",
+                    "reason": f"신뢰도 {s.get('confidence', '-')}",
+                }
+                asyncio.run(self.notifier.send_trade_alert(trade_data))
+                bought_list.append({
+                    "name": name,
+                    "qty":  result.total_qty,
+                    "price": result.avg_price,
+                })
+            else:
+                log.error(f"{name} NXT 매수 실패")
+
+        bought = len(bought_list)
+        log.info(f"NXT buy done: {bought}/{len(stocks)}종목 / 현금: {self.portfolio.cash:,.0f}원")
+
+        total_invested = sum(b["qty"] * b["price"] for b in bought_list)
+        asyncio.run(self.notifier.send_nxt_buy_summary(
+            bought_list,
+            total_invested=total_invested,
+            cash=self.portfolio.cash,
+        ))
+
+    def monitor_nxt_positions(self):
+        """
+        [08:00~10:30] NXT 포지션 갭다운 손절 모니터링 (2분 간격)
+
+        손절 주문 타입 자동 선택:
+          08:00~08:50 — nxt_sell()  trde_tp=61 (장전시간외 단일가)
+          09:00~10:30 — sell()      trde_tp=3  (정규장 시장가)
+        """
+        nxt_holdings = {
+            code: h for code, h in self.portfolio.holdings.items()
+            if getattr(h, "category", "") == "nxt"
+        }
+        if not nxt_holdings:
+            return
+
+        from config.settings import NXT_STOP_LOSS_PCT
+        now_str = datetime.now().strftime("%H:%M")
+        if now_str > "10:30":
+            return  # close_nxt_positions 가 처리
+
+        # 현재 장전거래 시간(08:00~08:50)인지 정규장 시간(09:00~)인지 판별
+        is_premarket = now_str < "08:50"
+
+        for code, holding in list(nxt_holdings.items()):
+            ohlcv = get_stock_ohlcv(code, 5)
+            if ohlcv.empty:
+                continue
+            current = ohlcv["close"].iloc[-1]
+            change  = (current - holding.avg_price) / holding.avg_price
+
+            if change <= -NXT_STOP_LOSS_PCT:
+                log.warning(f"NXT 손절 [{holding.name}]: {change:.1%} ({'장전' if is_premarket else '정규장'})")
+                if is_premarket:
+                    # 08:00~08:50 장전거래 — trde_tp=61 (장전시간외)
+                    result = self.executor.nxt_sell(
+                        code, holding.name, holding.quantity, current, "NXT_STOP_LOSS"
+                    )
+                else:
+                    # 09:00~10:30 정규장 — trde_tp=3 (시장가)
+                    result = self.executor.sell(
+                        code, holding.name, holding.quantity, current, "NXT_STOP_LOSS"
+                    )
+                if result.status == "FILLED":
+                    pnl = self.portfolio.remove_holding(code, result.total_qty, result.avg_price)
+                    asyncio.run(self.notifier.send(
+                        f"🔴 <b>NXT 손절</b> {holding.name}\n"
+                        f"수익률: {change:+.1%}\n"
+                        f"{'장전시간외' if is_premarket else '정규장 시장가'} 체결"
+                    ))
+
+    def close_nxt_positions(self):
+        """[10:30] NXT 잔여 포지션 전량 강제 청산"""
+        nxt_holdings = {
+            code: h for code, h in self.portfolio.holdings.items()
+            if getattr(h, "category", "") == "nxt"
+        }
+        if not nxt_holdings:
+            log.info("[10:30] NXT 포지션 없음")
+            return
+
+        log.info(f"[10:30] NXT 강제 청산: {len(nxt_holdings)}종목")
+        results_summary = []
+
+        for code, holding in list(nxt_holdings.items()):
+            ohlcv = get_stock_ohlcv(code, 5)
+            if ohlcv.empty:
+                continue
+            current = ohlcv["close"].iloc[-1]
+            change  = (current - holding.avg_price) / holding.avg_price
+
+            result = self.executor.sell(
+                code, holding.name, holding.quantity, current, "NXT_DEADLINE"
+            )
+            if result.status == "FILLED":
+                pnl = self.portfolio.remove_holding(code, result.total_qty, result.avg_price)
+                results_summary.append(
+                    f"{'🟢' if change >= 0 else '🔴'} {holding.name}: {change:+.1%}"
+                )
+
+        realized_pnl = sum(
+            (self.portfolio.cash - h.avg_price * h.quantity)
+            for h in nxt_holdings.values()
+            if hasattr(h, "avg_price")
+        )
+        asyncio.run(self.notifier.send_nxt_close_summary(
+            results_summary,
+            realized_pnl=0,  # 실제 PNL은 portfolio.remove_holding 반환값에서 집계 필요
+            cash=self.portfolio.cash,
+        ))
+
+    def update_nxt_result(self):
+        """[16:10] NXT 청산 결과 → 패턴DB 업데이트 + 텔레그램 결과 전송"""
+        log.info("[16:10] NXT pattern DB update")
+        today_nxt_summary = {"wins": 0, "losses": 0, "realized_pnl": 0}
+        try:
+            trades_path = DATA_DIR / "trades.json"
+            if not trades_path.exists():
+                asyncio.run(self.notifier.send(
+                    "🔍 <b>NXT 패턴DB</b>\n오늘 거래 기록 없음"
+                ))
+                return
+            trades = json.loads(trades_path.read_text(encoding="utf-8-sig"))
+            today  = datetime.now().strftime("%Y-%m-%d")
+            nxt_trades = [
+                t for t in trades
+                if t.get("trigger", "").startswith("NXT")
+                and t.get("date", t.get("timestamp", ""))[:10] == today
+                and t.get("side") in ("NXT청산", "NXT손절")
+            ]
+
+            # 오늘 NXT 성과 집계
+            for t in nxt_trades:
+                pnl = t.get("pnl", 0)
+                today_nxt_summary["realized_pnl"] += pnl
+                if pnl >= 0:
+                    today_nxt_summary["wins"] += 1
+                else:
+                    today_nxt_summary["losses"] += 1
+
+            if nxt_trades:
+                from surge_predictor.pattern_updater import update_with_nxt_result
+                update_with_nxt_result(nxt_trades)
+
+        except Exception as e:
+            log.error(f"NXT pattern update error: {e}")
+
+        # 패턴DB 읽어서 텔레그램 전송
+        try:
+            pattern_path = DATA_DIR / "store" / "pattern_db.json"
+            pattern_data = {}
+            if pattern_path.exists():
+                pattern_data = json.loads(pattern_path.read_text(encoding="utf-8-sig"))
+            asyncio.run(self.notifier.send_nxt_pattern_result(pattern_data, today_nxt_summary))
+        except Exception as e:
+            log.error(f"NXT pattern result send error: {e}")
+            asyncio.run(self.notifier.send(
+                f"🔍 <b>NXT 패턴DB 업데이트 완료</b>\n"
+                f"오늘 손익: {today_nxt_summary['realized_pnl']:+,.0f}원"
+            ))
+
     # ── 텔레그램 명령 콜백 ──
 
     def handle_telegram_command(self, command: str) -> str:
+        if command == "audit":
+            try:
+                from core.audit import run_audit
+                return run_audit(self)
+            except Exception as e:
+                log.error(f"audit 오류: {e}")
+                return f"❌ 통합점검 오류: {e}"
+
         summary = self.portfolio.get_summary()
         if command == "status":
             return (
@@ -438,6 +1051,40 @@ class MainEngine:
         return []
 
 
+# ── 대시보드 Watchdog ──
+
+_dashboard_proc = None  # 전역 참조 (종료 시 정리용)
+
+
+def _start_dashboard_proc() -> subprocess.Popen:
+    """대시보드 서버 subprocess 시작"""
+    script = Path(__file__).parent / "dashboard" / "server.py"
+    return subprocess.Popen(
+        [sys.executable, str(script)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+    )
+
+
+def _dashboard_watchdog():
+    """
+    대시보드 프로세스 감시 — 10초 주기로 살아있는지 확인
+    죽었으면 자동 재시작. main.py 가 살아있는 한 대시보드도 살아있다.
+    """
+    global _dashboard_proc
+    while True:
+        if _dashboard_proc is None or _dashboard_proc.poll() is not None:
+            if _dashboard_proc is not None:
+                log.warning("대시보드 프로세스 종료 감지 — 자동 재시작")
+            try:
+                _dashboard_proc = _start_dashboard_proc()
+                log.info(f"대시보드 서버 기동 (PID: {_dashboard_proc.pid}, 포트 8080)")
+            except Exception as e:
+                log.error(f"대시보드 재시작 실패: {e}")
+        time.sleep(10)
+
+
 # ── 진입점 ──
 
 if __name__ == "__main__":
@@ -460,8 +1107,12 @@ if __name__ == "__main__":
     scheduler.start()
     engine.running = True
 
+    # 대시보드 서버 — watchdog 스레드로 24/7 유지
+    dash_thread = threading.Thread(target=_dashboard_watchdog, daemon=True, name="DashboardWatchdog")
+    dash_thread.start()
+    log.info("대시보드 watchdog 시작 (포트 8080, 자동 재시작)")
+
     # 텔레그램 명령 봇 — 별도 스레드로 실행
-    import threading
     def run_cmd_bot():
         try:
             engine.cmd_bot.run_in_thread()
@@ -474,10 +1125,12 @@ if __name__ == "__main__":
 
     log.info("KangSub Bot 가동 중... (Ctrl+C 로 종료)")
     try:
-        import time
         while engine.running:
             time.sleep(60)
     except KeyboardInterrupt:
         log.info("종료 신호 수신")
         scheduler.stop()
+        if _dashboard_proc and _dashboard_proc.poll() is None:
+            _dashboard_proc.terminate()
+            log.info("대시보드 서버 종료")
         log.info("KangSub Bot 종료")

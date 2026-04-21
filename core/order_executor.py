@@ -40,6 +40,78 @@ class OrderExecutor:
         now = datetime.now().strftime("%H:%M")
         return TWAP_START <= now <= TWAP_END
 
+    def nxt_buy(
+        self, code: str, name: str, budget: float, current_price: float
+    ) -> OrderResult:
+        """
+        NXT 장전거래 즉시 매수 (08:00 실행)
+        — trde_tp="61" (장전시간외) — 코스피/코스닥 모두 지원
+        — TWAP/분할매수 없이 예산 전액 1회 즉시 주문
+        — _is_market_open() 체크 없음 (장전거래 전용)
+        """
+        qty = self._calc_qty(budget, current_price)
+        if qty <= 0:
+            log.warning(f"NXT 매수 불가: {name} 1주({current_price:,.0f}원) > 예산({budget:,.0f}원)")
+            return OrderResult(code, name, "BUY", 0, 0, 0, "FAILED", [])
+
+        log.info(f"NXT 즉시매수: {name}({code}) {qty}주 @ {current_price:,.0f}원 (예산 {budget:,.0f}원)")
+
+        if self.paper_trading:
+            exec_price = round(current_price * 1.0005, 0)
+            return OrderResult(
+                code, name, "BUY", qty, exec_price * qty, exec_price, "FILLED",
+                [{"qty": qty, "price": exec_price, "time": datetime.now().isoformat()}]
+            )
+
+        if self.kiwoom:
+            try:
+                result = self.kiwoom.buy_premarket(code, qty, int(current_price))
+                if result and result.get("return_code") == 0:
+                    return OrderResult(
+                        code, name, "BUY", qty, current_price * qty, current_price, "FILLED",
+                        [{"qty": qty, "price": current_price, "time": datetime.now().isoformat()}]
+                    )
+                msg = result.get("return_msg", "알 수 없는 오류") if result else "응답 없음"
+                log.error(f"NXT 장전매수 실패: {name}({code}) — {msg}")
+            except Exception as e:
+                log.error(f"NXT 장전매수 오류: {e}")
+
+        log.warning(f"NXT 주문 실패: 키움 API 미연결 또는 오류 — {name}({code})")
+        return OrderResult(code, name, "BUY", 0, 0, 0, "FAILED", [])
+
+    def nxt_sell(
+        self, code: str, name: str, qty: int, current_price: float, reason: str = ""
+    ) -> OrderResult:
+        """
+        NXT 장전거래 즉시 매도 (08:00~09:00 손절 전용)
+        — trde_tp="61" (장전시간외)
+        — monitor_nxt_positions() 갭다운 손절 전용
+        """
+        log.info(f"NXT 장전매도: {name}({code}) {qty}주 @ {current_price:,.0f}원 [{reason}]")
+
+        if self.paper_trading:
+            exec_price = round(current_price * 0.9995, 0)
+            return OrderResult(
+                code, name, "SELL", qty, exec_price * qty, exec_price, "FILLED",
+                [{"qty": qty, "price": exec_price, "time": datetime.now().isoformat(), "reason": reason}]
+            )
+
+        if self.kiwoom:
+            try:
+                result = self.kiwoom.sell_premarket(code, qty, int(current_price))
+                if result and result.get("return_code") == 0:
+                    return OrderResult(
+                        code, name, "SELL", qty, current_price * qty, current_price, "FILLED",
+                        [{"qty": qty, "price": current_price, "time": datetime.now().isoformat(), "reason": reason}]
+                    )
+                msg = result.get("return_msg", "알 수 없는 오류") if result else "응답 없음"
+                log.error(f"NXT 장전매도 실패: {name}({code}) — {msg}")
+            except Exception as e:
+                log.error(f"NXT 장전매도 오류: {e}")
+
+        log.warning(f"NXT 매도 실패: 키움 API 미연결 또는 오류 — {name}({code})")
+        return OrderResult(code, name, "SELL", 0, 0, 0, "FAILED", [])
+
     def _calc_qty(self, amount: float, price: float) -> int:
         """주문금액 / 주가 → 수량 (100주 단위 아님, 1주 단위)"""
         if price <= 0:

@@ -247,6 +247,96 @@
   }
 
   .refresh-time { font-size: 10px; color: var(--text3); margin-top: 4px; }
+
+  /* ── 메인 섹션 스위처 ─────────────────────────── */
+  .main-switcher {
+    display: flex; background: #070c18; border-bottom: 2px solid var(--border);
+    position: sticky; top: 62px; z-index: 95;
+  }
+  .main-sw-btn {
+    flex: 1; padding: 12px 8px; background: none; border: none;
+    color: var(--text3); font-size: 13px; font-weight: 600; cursor: pointer;
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+    transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .main-sw-btn.active { color: #fff; border-bottom-color: var(--accent); background: rgba(59,130,246,.06); }
+  .main-sw-btn:hover:not(.active) { color: var(--text2); background: rgba(255,255,255,.03); }
+
+  /* sub-tab when NXT section is active: hide */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* ── NXT 전용 스타일 ──────────────────────────── */
+  .nxt-info {
+    background: rgba(139,92,246,.08); border: 1px solid rgba(139,92,246,.25);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+    font-size: 11px; color: #b8a8e8; line-height: 1.6;
+  }
+  .nxt-stage {
+    background: var(--card2); border-radius: 8px; padding: 12px; margin-bottom: 8px;
+    border-left: 3px solid var(--purple);
+  }
+  .nxt-stage.go     { border-left-color: var(--green); }
+  .nxt-stage.stop   { border-left-color: var(--red); }
+  .nxt-stage.buy    { border-left-color: var(--accent); }
+  .nxt-stage.sell   { border-left-color: var(--red); }
+  .nxt-stage.ai     { border-left-color: #a78bfa; }
+  .nxt-stage-title  { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .nxt-stage-body   { font-size: 11px; color: var(--text2); line-height: 1.7; }
+
+  .iron-rule {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: rgba(239,68,68,.07); border: 1px solid rgba(239,68,68,.2);
+    border-radius: 8px; padding: 12px; margin-bottom: 8px;
+  }
+  .iron-num {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--red); color: #fff; font-weight: 800; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .iron-body { font-size: 11px; color: var(--text2); line-height: 1.7; }
+  .iron-body strong { color: var(--red); }
+
+  .nxt-live-card {
+    background: var(--card2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; margin-bottom: 8px;
+  }
+  .nxt-live-title {
+    font-size: 11px; font-weight: 700; color: var(--accent2); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .nxt-stock-row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .nxt-stock-row:last-child { border-bottom: none; }
+  .nxt-rank { font-size: 18px; font-weight: 900; color: var(--accent); min-width: 24px; }
+  .nxt-sname { flex: 1; font-size: 13px; font-weight: 700; }
+  .conf-HIGH { color: var(--green); font-weight: 800; font-size: 12px; }
+  .conf-MID  { color: var(--yellow); font-weight: 800; font-size: 12px; }
+  .conf-LOW  { color: var(--red); font-weight: 800; font-size: 12px; }
+  .nxt-chg   { font-size: 12px; font-weight: 700; color: var(--green); min-width: 52px; text-align: right; }
+  .nxt-vol   { font-size: 11px; color: var(--accent2); min-width: 36px; text-align: right; }
+
+  .hit-bar-wrap { margin: 8px 0; }
+  .hit-bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+  .hit-bar-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .hit-bar-fill  { height: 100%; background: linear-gradient(90deg, var(--accent), var(--green)); border-radius: 4px; transition: width .6s; }
+  .hit-dots { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+  .hit-dot {
+    padding: 3px 7px; border-radius: 4px; font-size: 10px; font-weight: 700;
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+  }
+  .nxt-meta-row {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+  }
+  .nxt-tag {
+    padding: 3px 9px; border-radius: 4px; font-size: 10px; font-weight: 700;
+    background: rgba(59,130,246,.12); border: 1px solid rgba(59,130,246,.25); color: var(--accent);
+  }
+  .nxt-tag.go   { background: rgba(16,185,129,.1);  border-color: rgba(16,185,129,.3);  color: var(--green); }
+  .nxt-tag.stop { background: rgba(239,68,68,.12);  border-color: rgba(239,68,68,.3);   color: var(--red); }
+  .nxt-tag.warn { background: rgba(245,158,11,.1);  border-color: rgba(245,158,11,.3);  color: var(--yellow); }
 </style>
 </head>
 <body>
@@ -262,9 +352,22 @@
   </div>
 </div>
 
-<!-- Tab Nav -->
-<div class="tab-nav">
-  <button class="tab-btn active" onclick="switchTab('strategy')">⚙️ 매매전략</button>
+<!-- ══ 메인 섹션 스위처 ══════════════════════════ -->
+<div class="main-switcher">
+  <button class="main-sw-btn active" id="sw-regular" onclick="switchSection('regular')">
+    📊 정규장 매매 로직
+  </button>
+  <button class="main-sw-btn" id="sw-nxt" onclick="switchSection('nxt')">
+    📡 NXT 급상승 예측
+  </button>
+</div>
+
+<!-- ══ 정규장 섹션 ══════════════════════════════ -->
+<div class="section active" id="section-regular">
+
+<!-- Sub Tab Nav -->
+<div class="tab-nav" style="top:108px">
+  <button class="tab-btn active" onclick="switchTab('strategy')">⚙️ 매매로직</button>
   <button class="tab-btn" onclick="switchTab('sectors')">🗂 7섹터</button>
   <button class="tab-btn" onclick="switchTab('dividend')">💰 배당</button>
   <button class="tab-btn" onclick="switchTab('signals')">📡 시그널</button>
@@ -1013,8 +1116,193 @@
 
 </div><!-- /tab-risk -->
 
+</div><!-- /section-regular -->
+
+
+<!-- ══════════════════════════════════════════════════════
+     NXT 급상승 예측 섹션
+════════════════════════════════════════════════════════ -->
+<div class="section" id="section-nxt">
+<div style="padding:12px">
+
+  <div class="nxt-info">
+    <strong>📡 NXT 급상승 예측 시스템</strong><br>
+    핵심 철학: "권력자 발언 → 정책 → 수급 → 주가"<br>
+    매일 07:30 시간외 수급 + Claude AI 분석으로 <strong>NXT 매수 3종목 자동 확정</strong>
+  </div>
+
+  <!-- ── 전체 프로세스 타임라인 ── -->
+  <div class="card">
+    <div class="card-title"><span class="icon">⏱</span> NXT 일일 프로세스 타임라인</div>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-time">전일 16:10</div>
+        <div class="tl-text">패턴DB 자동 업데이트</div>
+        <div class="tl-sub">당일 NXT 결과(수익/손실) 기록 → 누적 적중률 갱신 → 텔레그램 전송</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-time">당일 07:00~07:30</div>
+        <div class="tl-text">시간외 단일가 모니터링</div>
+        <div class="tl-sub">코스피/코스닥 시간외 상승 상위 종목 실시간 관찰 (기준: +1%~+15%, 거래량 전일 2배↑)</div>
+      </div>
+      <div class="tl-item green">
+        <div class="tl-time">07:30</div>
+        <div class="tl-text">시간외 수집 완료 (afterhours_collector.py)</div>
+        <div class="tl-sub">키움 OCX TR 조회 → 코스피+코스닥 필터링 → afterhours_result.json 저장</div>
+      </div>
+      <div class="tl-item green">
+        <div class="tl-time">07:35</div>
+        <div class="tl-text">Claude AI 분석 실행 (signal_analyzer.py)</div>
+        <div class="tl-sub">시장 환경 확인 → 시그널 캐치 → 정책 호응 → 수급 교차검증 → 종목 3개 확정</div>
+      </div>
+      <div class="tl-item green">
+        <div class="tl-time">08:00</div>
+        <div class="tl-text">NXT 매수 실행</div>
+        <div class="tl-sub">HIGH 신뢰도 → 즉시 매수 / MID 신뢰도 → 08:10 갭 방향 확인 후 매수</div>
+      </div>
+      <div class="tl-item yellow">
+        <div class="tl-time">08:00 ~ 10:30</div>
+        <div class="tl-text">실시간 모니터링 (3대 철칙 적용)</div>
+        <div class="tl-sub">갭다운 즉시 손절 · 고점 -3% 자동 청산 · 10:30 데드라인 일괄 청산</div>
+      </div>
+      <div class="tl-item red">
+        <div class="tl-time">10:30 (데드라인)</div>
+        <div class="tl-text">잔여 전량 무조건 청산</div>
+        <div class="tl-sub">NXT는 장전 모멘텀 전략 — 오전 유동성이 끝나기 전 반드시 청산</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 매수 3단계 필터 ── -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🟢</span> NXT 매수 진입 로직 (3단계 필터)</div>
+
+    <div class="nxt-stage go">
+      <div class="nxt-stage-title">STAGE 0 · 시장 환경 필터 (통과 못하면 즉시 중단)</div>
+      <div class="nxt-stage-body">
+        <span class="tag tag-sell">나스닥 -1% 이하 → 전면 중단</span>
+        <span class="tag tag-risk">VIX 30↑ → 전면 중단</span>
+        <span class="tag tag-risk">VIX 20~30 → 1종목만</span><br><br>
+        Claude가 웹 검색으로 나스닥 전일 등락률·VIX 실시간 확인<br>
+        정상 시장 → <code>3종목</code> / VIX 경계 → <code>1종목</code> / 위험 → <code>매매 중단</code>
+      </div>
+    </div>
+
+    <div class="nxt-stage ai">
+      <div class="nxt-stage-title">STAGE 1 · 시그널 캐치 (웹 검색 + 점수 산정)</div>
+      <div class="nxt-stage-body">
+        <span class="tag tag-purple">대통령 직접 발언 + 섹터 명시: 5점</span>
+        <span class="tag tag-purple">글로벌 빅테크 CEO 투자 선언: 4점</span>
+        <span class="tag tag-purple">장관 정책 + 예산: 4점</span>
+        <span class="tag tag-info">미국 정부/연준: 3점</span>
+        <span class="tag tag-info">기타: 1~2점</span><br><br>
+        검색 대상: 이재명 대통령 48시간 발언/행보 · 주요 장관 정책 · 엔비디아/구글/MS CEO · 연준<br>
+        최고 점수 테마 1~2순위 선정 → 정책 호응 확인 (HIGH/MID/LOW)
+      </div>
+    </div>
+
+    <div class="nxt-stage buy">
+      <div class="nxt-stage-title">STAGE 2 · 시간외 수급 교차검증</div>
+      <div class="nxt-stage-body">
+        <span class="tag tag-buy">테마 일치 + 시간외 +1%↑ + 거래량 2배↑ → HIGH</span>
+        <span class="tag tag-risk">테마 불일치 → MID로 하향</span><br><br>
+        패턴DB 참조: 적중률 60%↑ 섹터 → +2점 / 30%↓ 섹터 → -2점<br>
+        최종 점수 상위 3종목 → <code>nxt_candidates.json</code> 저장
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 매도 3대 철칙 ── -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🔴</span> NXT 매도 3대 철칙 (예외 없음)</div>
+
+    <div class="iron-rule">
+      <div class="iron-num">1</div>
+      <div class="iron-body">
+        <strong>갭다운 즉시 전량 손절</strong><br>
+        08:00 시초가가 전일 종가 대비 하락 갭으로 시작하면 → 가격 불문 즉시 전량 매도<br>
+        <span class="tag tag-risk">이유: NXT는 갭업 모멘텀 전략, 갭다운 = 시나리오 붕괴</span>
+      </div>
+    </div>
+    <div class="iron-rule">
+      <div class="iron-num">2</div>
+      <div class="iron-body">
+        <strong>고점 대비 -3% 이탈 시 전량 매도</strong><br>
+        매수 후 형성된 고점 기준 -3% 하락 시 즉시 청산 (트레일링 스톱)<br>
+        <span class="tag tag-risk">이유: 단기 모멘텀 소멸 신호, 추가 하락 방어</span>
+      </div>
+    </div>
+    <div class="iron-rule">
+      <div class="iron-num">3</div>
+      <div class="iron-body">
+        <strong>10:30 데드라인 — 잔여 전량 무조건 청산</strong><br>
+        위 두 조건에 걸리지 않더라도 10:30이 되면 무조건 전량 매도<br>
+        <span class="tag tag-risk">이유: 오전 장 모멘텀 종료, 오후 되돌림 리스크 차단</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 오늘의 실시간 분석 결과 ── -->
+  <div class="card">
+    <div class="card-title">
+      <span class="icon">📊</span> 오늘의 분석 결과
+      <span class="live-dot" style="margin-left:6px"></span>
+      <span style="font-size:10px;color:var(--text3);font-weight:400" id="nxt-analysis-time">로딩중...</span>
+    </div>
+
+    <div class="nxt-meta-row" id="nxt-meta-tags">
+      <span class="nxt-tag" id="nxt-t-date">-- 분석</span>
+      <span class="nxt-tag" id="nxt-t-mkt">시장: --</span>
+      <span class="nxt-tag" id="nxt-t-nas">나스닥 --</span>
+      <span class="nxt-tag" id="nxt-t-vix">VIX --</span>
+    </div>
+
+    <div class="nxt-live-card">
+      <div class="nxt-live-title">🎯 확정 종목</div>
+      <div id="nxt-stocks-live">
+        <div class="empty">분석 대기중 (07:35 실행)</div>
+      </div>
+    </div>
+
+    <div class="nxt-live-card" id="nxt-signal-card" style="display:none">
+      <div class="nxt-live-title">📌 핵심 시그널 요약</div>
+      <div id="nxt-signal-live" style="font-size:11px;color:var(--text2);line-height:1.7">--</div>
+    </div>
+  </div>
+
+  <!-- ── 누적 적중률 & 패턴DB ── -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📈</span> 누적 적중률 & 패턴 학습</div>
+    <div id="nxt-pattern-section">
+      <div class="empty">패턴DB 로딩중...</div>
+    </div>
+  </div>
+
+  <!-- ── 시간외 데이터 (오늘 수집분) ── -->
+  <div class="card">
+    <div class="card-title">
+      <span class="icon">🕐</span> 오늘 시간외 단일가 수집
+      <span style="margin-left:auto;font-size:10px;color:var(--text3)" id="ah-collect-time">--</span>
+    </div>
+    <div id="nxt-afterhours-list">
+      <div class="empty">07:30 수집 대기중</div>
+    </div>
+  </div>
+
+</div><!-- /padding -->
+</div><!-- /section-nxt -->
+
 
 <script>
+// ── 섹션 스위처 ──────────────────────────────────
+function switchSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.main-sw-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('section-' + id).classList.add('active');
+  document.getElementById('sw-' + id).classList.add('active');
+  if (id === 'nxt') loadNXTSection();
+}
+
 // ── Tab switching ────────────────────────────────
 function switchTab(id) {
   document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
@@ -1120,8 +1408,150 @@ async function loadDividend() {
   } catch(e) { /* 실패 시 기본값 유지 */ }
 }
 
+// ── NXT 섹션 데이터 로드 ─────────────────────────
+async function loadNXTSection() {
+  await Promise.all([loadNXTLive(), loadAfterHoursLive()]);
+}
+
+async function loadNXTLive() {
+  try {
+    const d = await fetch(BASE + '/api/nxt').then(r => r.json());
+    const cand = d.candidates || {};
+    const pat  = d.pattern || {};
+    const stocks = Array.isArray(cand.stocks) ? cand.stocks : [];
+
+    // 분석 시각
+    document.getElementById('nxt-analysis-time').textContent =
+      d.analysis_date ? `${d.analysis_date} ${d.analysis_time || ''}` : '--';
+
+    // 메타 태그
+    const dt = cand.date ? cand.date.slice(5) : '--';
+    document.getElementById('nxt-t-date').textContent = `${dt} 분석`;
+
+    const ms = cand.market_status || '--';
+    const mEl = document.getElementById('nxt-t-mkt');
+    mEl.textContent = `시장: ${ms}`;
+    mEl.className = 'nxt-tag ' + (ms==='진행'?'go': ms==='중단'?'stop':'warn');
+
+    const nas = cand.nasdaq_change;
+    const nEl = document.getElementById('nxt-t-nas');
+    nEl.textContent = `나스닥 ${nas!=null?(nas>=0?'+':'')+nas.toFixed(2)+'%':'--'}`;
+    if (nas!=null) nEl.className = 'nxt-tag ' + (nas>=0?'go':'stop');
+
+    const vix = cand.vix;
+    const vEl = document.getElementById('nxt-t-vix');
+    vEl.textContent = `VIX ${vix||'--'}`;
+    if (vix!=null) vEl.className = 'nxt-tag ' + (vix<20?'go':vix<30?'warn':'stop');
+
+    // 확정 종목
+    const sEl = document.getElementById('nxt-stocks-live');
+    if (!stocks.length) {
+      sEl.innerHTML = `<div class="empty">${cand.stop?'오늘은 매매 중단':'분석 대기중 (07:35 실행)'}</div>`;
+    } else {
+      sEl.innerHTML = stocks.map(s => {
+        const chg = s.change_rate!=null ? (s.change_rate>=0?'+':'')+s.change_rate.toFixed(1)+'%' : '--';
+        const vol = s.vol_ratio!=null ? s.vol_ratio+'x' : '--';
+        return `<div class="nxt-stock-row">
+          <span class="nxt-rank">${s.rank||''}</span>
+          <div style="flex:1">
+            <div class="nxt-sname">${s.name||'--'}</div>
+            <div style="font-size:10px;color:var(--text3)">${s.code||''}</div>
+          </div>
+          <span class="conf-${s.confidence||''}">${s.confidence||'--'}</span>
+          <span class="nxt-chg">${chg}</span>
+          <span class="nxt-vol">${vol}</span>
+        </div>`;
+      }).join('');
+    }
+
+    // 핵심 시그널 텍스트
+    const sig = d.analysis_text || '';
+    if (sig) {
+      const m = sig.match(/\[핵심시그널\]([\s\S]{0,300})/);
+      const snippet = m ? m[1].trim().slice(0, 280) : sig.replace(/\[.*?\]/g,'').trim().slice(0, 280);
+      if (snippet) {
+        document.getElementById('nxt-signal-live').textContent = snippet;
+        document.getElementById('nxt-signal-card').style.display = 'block';
+      }
+    }
+
+    // 누적 적중률
+    const total = pat.total_days || 0;
+    const rate  = pat.overall_hit_rate || 0;
+    const rec7  = pat.recent_7 || [];
+    const pEl   = document.getElementById('nxt-pattern-section');
+
+    if (total === 0) {
+      pEl.innerHTML = '<div class="empty">패턴 데이터 없음 (첫 실행 전)</div>';
+    } else {
+      const hitCnt = rec7.filter(r=>(r.hit_rate||0)>=0.5).length;
+      const rateColor = rate>=0.6?'var(--green)':rate>=0.3?'var(--yellow)':'var(--red)';
+      pEl.innerHTML = `
+        <div class="hit-bar-wrap">
+          <div class="hit-bar-label">
+            <span>누적 적중률</span>
+            <span style="font-weight:800;color:${rateColor}">${(rate*100).toFixed(1)}%</span>
+          </div>
+          <div class="hit-bar-track">
+            <div class="hit-bar-fill" style="width:${rate*100}%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:4px">
+            <span>총 ${total}일 운영</span>
+            <span>최근 ${rec7.length}일 중 ${hitCnt}일 적중</span>
+          </div>
+        </div>
+        <div class="hit-dots">
+          ${rec7.map(r=>{
+            const ok=(r.hit_rate||0)>=0.5;
+            const d=r.date?r.date.slice(5):'--';
+            return `<div class="hit-dot" style="background:${ok?'rgba(16,185,129,.15)':'rgba(239,68,68,.12)'};color:${ok?'var(--green)':'var(--red)'}">
+              <span style="font-size:13px">${ok?'✓':'✗'}</span>
+              <span style="font-size:9px">${d}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      `;
+    }
+  } catch(e) {
+    document.getElementById('nxt-stocks-live').innerHTML = '<div class="empty">API 연결 실패</div>';
+  }
+}
+
+async function loadAfterHoursLive() {
+  try {
+    const d = await fetch(BASE + '/api/afterhours').then(r => r.json());
+    const stocks = Array.isArray(d.stocks) ? d.stocks : [];
+    if (d.collected_at) {
+      document.getElementById('ah-collect-time').textContent = d.collected_at.slice(11,16) + ' 수집';
+    }
+    const el = document.getElementById('nxt-afterhours-list');
+    if (!stocks.length) {
+      el.innerHTML = '<div class="empty">07:30 수집 대기중</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 60px 60px 50px;gap:4px;padding:4px 0;font-size:10px;color:var(--text3);border-bottom:1px solid var(--border)">
+        <span>종목명</span><span style="text-align:right">시장</span>
+        <span style="text-align:right">등락률</span><span style="text-align:right">거래량배율</span>
+      </div>
+      ${stocks.slice(0,12).map((s,i)=>`
+        <div style="display:grid;grid-template-columns:1fr 60px 60px 50px;gap:4px;padding:7px 0;border-bottom:1px solid var(--border);align-items:center">
+          <span style="font-size:12px;font-weight:600">${i+1}. ${s.name||'--'}</span>
+          <span style="text-align:right;font-size:10px;color:var(--text3)">${s.market||''}</span>
+          <span style="text-align:right;font-weight:700;color:var(--green)">+${s.change_rate||'--'}%</span>
+          <span style="text-align:right;font-size:11px;color:var(--accent2)">${s.vol_ratio||'--'}x</span>
+        </div>`).join('')}
+    `;
+  } catch(e) {}
+}
+
 // ── Auto refresh ──────────────────────────────────
 setInterval(() => {
+  const activeSection = document.querySelector('.section.active');
+  if (activeSection && activeSection.id === 'section-nxt') {
+    loadNXTSection();
+    return;
+  }
   const activeTab = document.querySelector('.content.active');
   if (!activeTab) return;
   const id = activeTab.id.replace('tab-', '');

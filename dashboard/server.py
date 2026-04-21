@@ -51,19 +51,34 @@ def strategy():
 
 @app.route("/api/portfolio")
 def api_portfolio():
-    # 1) 키움 REST API 실시간 잔고 조회 시도
+    # 1) Kiwoom ka01002 — 계좌평가잔고내역 (수동매수 포함 전체 보유종목)
+    if _kiwoom:
+        try:
+            holdings = _kiwoom.get_portfolio_holdings()
+            if holdings and holdings.get("total_value", 0) > 0:
+                return jsonify(holdings)
+        except Exception:
+            pass
+
+    # 2) 수동 동기화 파일 (portfolio_manual.json) — 자동 현재가 반영
+    manual = _read(DATA_STORE / "portfolio_manual.json", None)
+    if manual and manual.get("total_value", 0) > 0:
+        return jsonify(manual)
+
+    # 3) Kiwoom ka01690 — 봇 거래 내역 기반 잔고 (수동매수 미포함)
     if _kiwoom:
         try:
             balance = _kiwoom.get_balance()
-            if balance and not balance.get("error"):
+            if balance and not balance.get("error") and balance.get("total_value", 0) > 0:
                 return jsonify(balance)
         except Exception:
             pass
-    # 2) 로컬 캐시 파일 fallback
+
+    # 4) 로컬 캐시 fallback
     data = _read(DATA_STORE / "portfolio.json", {
-        "total_capital": 100_000_000,
-        "total_value":   100_000_000,
-        "cash":          100_000_000,
+        "total_capital": 30_000_000,
+        "total_value":   0,
+        "cash":          0,
         "total_pnl":     0.0,
         "total_pnl_pct": 0.0,
         "num_holdings":  0,
@@ -173,9 +188,151 @@ def api_status():
     })
 
 
+@app.route("/api/nxt")
+def api_nxt():
+    """NXT 급상승 예측 — 후보종목 + 패턴DB 요약"""
+    candidates = _read(DATA_STORE / "nxt_candidates.json", {})
+    prediction = _read(DATA_STORE / "prediction_result.json", {})
+    pattern    = _read(DATA_STORE / "pattern_db.json", {})
+
+    daily = pattern.get("daily_results", [])
+    recent_7 = daily[-7:] if daily else []
+
+    return jsonify({
+        "candidates": candidates,
+        "analysis_text": prediction.get("analysis", "")[:800] if prediction else "",
+        "analysis_time": prediction.get("time", "-"),
+        "analysis_date": prediction.get("date", "-"),
+        "pattern": {
+            "total_days":      pattern.get("total_days", 0),
+            "overall_hit_rate": pattern.get("overall_hit_rate", 0.0),
+            "recent_7":        recent_7,
+        },
+    })
+
+
+@app.route("/api/scheduler")
+def api_scheduler():
+    """스케줄러 실행 현황 — scheduler_status.json 기반 동적 응답"""
+    status = _read(DATA_STORE / "scheduler_status.json", {})
+
+    # 함수명 → 표시명 + 예정 시각 매핑 (jobs.py 기준)
+    JOB_META = [
+        ("morning_health_check",    "시스템 점검",        "06:00"),
+        ("collect_news",            "뉴스 크롤링",        "07:00"),
+        ("collect_afterhours",      "NXT 시간외 수집",    "07:30"),
+        ("execute_nxt_buy",         "NXT 매수",           "08:00"),
+        ("analyze_news_signals",    "뉴스 시그널 분석",   "08:00"),
+        ("morning_briefing",        "모닝 브리핑",        "08:30"),
+        ("sync_manual_portfolio_prices", "현재가 동기화", "09:05"),
+        ("reconcile_portfolio",     "포트폴리오 검증",    "09:10"),
+        ("execute_buy_signals",     "PAM 매수",           "09:30"),
+        ("monitor_stop_loss",       "리스크 점검",        "5분간격"),
+        ("midday_report",           "중간 리포트",        "12:00"),
+        ("pre_close_check",         "마감 전 확인",       "14:50"),
+        ("save_portfolio_snapshot", "포트폴리오 스냅샷",  "15:40"),
+        ("reconcile_portfolio",     "마감 검증",          "15:45"),
+        ("check_dart_disclosures",  "DART 공시 체크",     "16:00"),
+        ("update_nxt_result",       "NXT 패턴DB 업데이트","16:10"),
+        ("daily_report",            "일일 리포트",        "17:00"),
+        ("update_technical_signals","기술적 분석 업데이트","18:00"),
+        ("check_global_market",     "글로벌 시장 체크",   "22:00"),
+    ]
+
+    now_str = datetime.now().strftime("%H:%M")
+    result  = []
+    seen    = set()
+    for fn_name, display_name, scheduled in JOB_META:
+        # reconcile_portfolio 두 번 등록 → 두 번째는 별도 표시
+        key = fn_name if fn_name not in seen else fn_name + "_close"
+        seen.add(fn_name)
+
+        s     = status.get(fn_name, {})
+        state = s.get("status", "pending")
+        # 오늘 실행 여부 확인 (last_run 날짜)
+        last  = s.get("last_run", "")
+        today = datetime.now().strftime("%Y-%m-%d")
+        ran_today = last.startswith(today) if last else False
+        if not ran_today:
+            state = "pending"
+
+        result.append({
+            "name":      display_name,
+            "scheduled": scheduled,
+            "status":    state,           # completed | error | running | pending
+            "last_run":  s.get("time", "-") if ran_today else "-",
+            "error":     s.get("error") if state == "error" else None,
+        })
+
+    return jsonify(result)
+
+
+@app.route("/api/afterhours")
+def api_afterhours():
+    """시간외 단일가 수집 결과"""
+    data = _read(DATA_STORE / "afterhours_result.json", {})
+    return jsonify(data)
+
+
+@app.route("/api/trading_plan")
+def api_trading_plan():
+    """오늘의 매매 계획 — PAM(정규장) + NXT(장전거래) 통합"""
+    manual   = _read(DATA_STORE / "portfolio_manual.json", {})
+    signals  = _read(DATA_STORE / "signals.json", [])
+    nxt_data = _read(DATA_STORE / "nxt_candidates.json", {})
+
+    cash          = manual.get("cash", 0)
+    total_capital = manual.get("total_capital", 10_000_000)
+    n_holdings    = manual.get("num_holdings", 0)
+
+    # ── PAM ──
+    buy_sigs = sorted(
+        [s for s in signals if s.get("action") == "BUY"],
+        key=lambda s: s.get("weighted_score", 0), reverse=True
+    )[:5]
+    pam_budget    = round(min(cash, total_capital * 0.5))
+    pam_per_stock = round(pam_budget / len(buy_sigs)) if buy_sigs else 0
+
+    # ── NXT ──
+    nxt_stocks = nxt_data.get("stocks", [])
+    nxt_budget    = round(min(cash, total_capital * 0.40))
+    nxt_per_stock = round(nxt_budget / len(nxt_stocks)) if nxt_stocks else 0
+
+    return jsonify({
+        "pam": {
+            "signals":          signals[:10],   # BUY + HOLD 모두 포함
+            "budget":           pam_budget,
+            "per_stock":        pam_per_stock,
+            "cash":             round(cash),
+            "current_holdings": n_holdings,
+        },
+        "nxt": {
+            "stocks":        nxt_stocks,
+            "stop":          nxt_data.get("stop", False),
+            "nasdaq_change": nxt_data.get("nasdaq_change"),
+            "vix":           nxt_data.get("vix"),
+            "analysis_date": nxt_data.get("date", "-"),
+            "analysis_time": nxt_data.get("time", "-"),
+            "budget":        nxt_budget,
+            "per_stock":     nxt_per_stock,
+        },
+        "cash":          round(cash),
+        "total_capital": total_capital,
+        "updated":       datetime.now().strftime("%H:%M:%S"),
+    })
+
+
+def run_dashboard(host="0.0.0.0", port=8080):
+    """main.py thread entry point (waitress preferred)"""
+    try:
+        from waitress import serve
+        import logging
+        logging.getLogger("waitress").setLevel(logging.WARNING)
+        serve(app, host=host, port=port, threads=4)
+    except ImportError:
+        # fallback to Flask dev server
+        app.run(host=host, port=port, debug=False, threaded=True)
+
+
 if __name__ == "__main__":
-    print("=" * 50)
-    print("KangSub Bot 대시보드 서버 시작")
-    print("http://0.0.0.0:8080")
-    print("=" * 50)
-    app.run(host="0.0.0.0", port=8080, debug=False, threaded=True)
+    run_dashboard()

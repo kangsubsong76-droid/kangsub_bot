@@ -17,22 +17,32 @@ st.set_page_config(
 DATA_DIR = Path(__file__).parent.parent / "data" / "store"
 
 # ── 데이터 로드 ──
+def _read_json(path):
+    """UTF-8 BOM 포함 여부 무관하게 JSON 안전 로드"""
+    try:
+        return json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return None
+
 def load_portfolio():
     path = DATA_DIR / "portfolio.json"
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = _read_json(path)
+        return data if data is not None else {}
     return {}
 
 def load_signals():
     path = DATA_DIR / "signals.json"
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = _read_json(path)
+        return data if data is not None else []
     return []
 
 def load_trades():
     path = DATA_DIR / "trades.json"
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = _read_json(path)
+        return data if data is not None else []
     return []
 
 # ── 사이드바 ──
