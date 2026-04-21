@@ -656,6 +656,92 @@ class KiwoomRestAPI:
         return df.tail(days)
 
     # ════════════════════════════════════════════════════════
+    # ── 급상승 순위 조회 (ka10027) — 주식등락률순위
+    # ════════════════════════════════════════════════════════
+    def get_surge_ranking(self, market: str = "0", top_n: int = 50) -> list:
+        """
+        주식등락률순위 (ka10027)
+        market: "0"=전체, "1"=KOSPI, "2"=KOSDAQ
+        top_n : 반환할 최대 종목 수 (API는 보통 100건 단위 연속조회)
+        반환  : [{"rank", "code", "name", "price", "change_rate", "volume", "market"}, ...]
+        """
+        body = {
+            "mrkt_tp":    market,   # 시장구분 (0=전체)
+            "sort_tp":    "1",      # 정렬기준 (1=등락률순)
+            "trde_qty_tp":"0",      # 거래량구분 (0=전체)
+            "stk_cnd":    "0",      # 종목조건 (0=전체)
+            "upjong_cd":  "",       # 업종코드 (전체)
+        }
+        data = self._post("/api/dostk/rank", body, "ka10027")
+        if not data or data.get("return_code") != 0:
+            log.debug(f"ka10027 조회 실패: {data.get('return_msg') if data else 'None'}")
+            return []
+
+        # 응답 리스트 필드명 후보 (실제 응답 확인 후 자동 매핑)
+        row_list = None
+        for key in ("stk_errt_stts_qry", "stk_rank_list", "output", "list", "data"):
+            candidate = data.get(key)
+            if isinstance(candidate, list) and candidate:
+                row_list = candidate
+                break
+
+        if not row_list:
+            # 응답 최상위에 리스트가 직접 있는 경우 대응
+            for v in data.values():
+                if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
+                    row_list = v
+                    break
+
+        if not row_list:
+            log.debug(f"ka10027 리스트 필드 미발견. 응답 키: {list(data.keys())}")
+            return []
+
+        def _safe_float(row, *keys):
+            for k in keys:
+                try:
+                    v = str(row.get(k, "")).replace(",", "").replace("+", "").replace("%", "")
+                    f = float(v)
+                    if f != 0:
+                        return f
+                except Exception:
+                    continue
+            return 0.0
+
+        def _safe_int(row, *keys):
+            for k in keys:
+                try:
+                    v = str(row.get(k, "")).replace(",", "")
+                    return abs(int(float(v)))
+                except Exception:
+                    continue
+            return 0
+
+        results = []
+        for i, r in enumerate(row_list[:top_n], 1):
+            # 등락부호 처리 (flu_smbol: 1=상한, 2=상승, 4=하한, 5=하락)
+            flu_smbol = str(r.get("flu_smbol", "2"))
+            rate = _safe_float(r, "flu_rt", "chg_rt", "change_rate", "errt_rt")
+            if flu_smbol in ("4", "5"):
+                rate = -abs(rate)
+
+            # 시장구분 (mrkt_tp: 1=KOSPI, 2=KOSDAQ, 기타=기타)
+            mkt_code = str(r.get("mrkt_tp", r.get("mkt_tp", "")))
+            mkt_name = {"1": "KOSPI", "2": "KOSDAQ"}.get(mkt_code, "")
+
+            results.append({
+                "rank":        i,
+                "code":        str(r.get("stk_cd", r.get("code", ""))).zfill(6),
+                "name":        r.get("stk_nm", r.get("name", "")),
+                "price":       _safe_int(r, "cur_prc", "close_pric", "price"),
+                "change_rate": round(rate, 2),
+                "volume":      _safe_int(r, "trde_qty", "acml_vol", "volume"),
+                "market":      mkt_name,
+            })
+
+        log.info(f"ka10027 급상승 Top{len(results)} 수신 완료")
+        return results
+
+    # ════════════════════════════════════════════════════════
     # ── 연결 테스트
     # ════════════════════════════════════════════════════════
     def test_connection(self) -> bool:

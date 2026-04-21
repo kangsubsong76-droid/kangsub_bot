@@ -73,7 +73,7 @@ class MainEngine:
         kiwoom_api = self.kiwoom if kiwoom_connected else None
         self.executor = OrderExecutor(kiwoom_api=kiwoom_api, paper_trading=paper)
 
-        # market_data / fundamentals에 키움 인스턴스 주입 (OHLCV·재무 키움 API로 조회)
+        # market_data / fundamentals / surge_tracker 키움 인스턴스 주입
         if kiwoom_connected:
             from data.market_data import set_kiwoom
             set_kiwoom(self.kiwoom)
@@ -81,6 +81,9 @@ class MainEngine:
             from data.fundamentals import set_kiwoom as set_kiwoom_funda
             set_kiwoom_funda(self.kiwoom)
             log.info("fundamentals: 키움 REST API 재무(ka10001) 활성화")
+            from data.surge_tracker import set_kiwoom as set_kiwoom_surge
+            set_kiwoom_surge(self.kiwoom)
+            log.info("surge_tracker: 키움 REST API 급상승순위(ka10027) 활성화")
         self.news_analyzer = NewsAnalyzer()
         self.signal_engine = SignalEngine()
         self.dart = DartClient()
@@ -1041,6 +1044,35 @@ class MainEngine:
             cash=self.portfolio.cash,
         ))
 
+    def collect_surge_top50(self):
+        """
+        [10:30] 급상승 Top50 스냅샷 수집 → data/store/surge_db.json 누적 저장
+        - 키움 ka10027(주식등락률순위) 우선, pykrx 폴백
+        - signal_engine._generate_signals() 에서 surge_score 를 추가 가중치로 활용
+        - NXT collect_afterhours() 에서 surge_count 로 종목 신뢰도 보강 가능
+        """
+        log.info("[10:30] 급상승 Top50 수집 시작")
+        try:
+            from data.surge_tracker import collect as surge_collect
+            stocks = surge_collect(top_n=50)
+            if not stocks:
+                log.warning("급상승 Top50 데이터 없음 — 소스 응답 실패")
+                asyncio.run(self.notifier.send("⚠️ 급상승 Top50 수집 실패 (ka10027 + pykrx 모두 응답 없음)"))
+                return
+
+            top5 = "\n".join(
+                f"  {s['rank']}. {s['name']} ({s['code']}) {s['change_rate']:+.1f}%"
+                for s in stocks[:5]
+            )
+            asyncio.run(self.notifier.send(
+                f"📈 <b>급상승 Top50 수집 완료</b> [{datetime.now():%H:%M}]\n"
+                f"{top5}\n"
+                f"  … 외 {len(stocks)-5}종목 / DB 누적 저장"
+            ))
+            log.info(f"급상승 Top50 저장 완료 (1위: {stocks[0]['name']} {stocks[0]['change_rate']:+.1f}%)")
+        except Exception as e:
+            log.error(f"collect_surge_top50 오류: {e}")
+
     def update_nxt_result(self):
         """[16:10] NXT 청산 결과 → 패턴DB 업데이트 + 텔레그램 결과 전송"""
         log.info("[16:10] NXT pattern DB update")
@@ -1141,6 +1173,13 @@ class MainEngine:
 
         from config.universe import get_stock_name
         codes = get_unique_codes()
+        # 급상승 DB 로드 (surge_score 보정용)
+        try:
+            from data.surge_tracker import get_surge_score
+            _surge_score_fn = get_surge_score
+        except Exception:
+            _surge_score_fn = None
+
         log.info(f"[signal] 종목 OHLCV 조회 시작: {len(codes)}종목")
         tech_signals = []
         for i, code in enumerate(codes, 1):
@@ -1155,6 +1194,15 @@ class MainEngine:
                 ts.pbr = funda.get("pbr")
                 ts.roe = funda.get("roe")
                 ts.div_yield = funda.get("div_yield")
+            # 급상승 이력 보정: 최근 20일 surge_score → news_score 에 최대 +10 가산
+            if _surge_score_fn:
+                try:
+                    sc = _surge_score_fn(code, days=20)
+                    if sc > 0:
+                        ts.news_score = getattr(ts, "news_score", 0) + sc * 10
+                        log.debug(f"[signal] {code} surge_score={sc:.3f} → news_score 보정")
+                except Exception:
+                    pass
             tech_signals.append(ts)
             if i % 10 == 0:
                 log.info(f"[signal] OHLCV 진행: {i}/{len(codes)}")

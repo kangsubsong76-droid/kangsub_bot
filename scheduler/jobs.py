@@ -99,8 +99,9 @@ class TradingScheduler:
         # 09:00~15:20 — [PAM] 손절매 모니터링 (5분 간격)
         s.add_job(safe_job(e.monitor_stop_loss), CronTrigger(hour="9-15", minute="*/5", timezone=TZ, day_of_week="mon-fri"), id="stop_loss")
 
-        # 10:30 — [NXT] 잔여 포지션 강제 청산
-        s.add_job(safe_job(e.close_nxt_positions), CronTrigger(hour=10, minute=30, timezone=TZ, day_of_week="mon-fri"), id="nxt_close")
+        # 10:30 — [NXT] 잔여 포지션 강제 청산 + 급상승 Top50 스냅샷 수집
+        s.add_job(safe_job(e.close_nxt_positions),  CronTrigger(hour=10, minute=30, timezone=TZ, day_of_week="mon-fri"), id="nxt_close")
+        s.add_job(safe_job(e.collect_surge_top50), CronTrigger(hour=10, minute=32, timezone=TZ, day_of_week="mon-fri"), id="surge_collect")
 
         # 12:00 — 점심 상태 체크 + 텔레그램 중간 리포트
         s.add_job(safe_job(e.midday_report), CronTrigger(hour=12, minute=0, timezone=TZ, day_of_week="mon-fri"), id="midday_report")
