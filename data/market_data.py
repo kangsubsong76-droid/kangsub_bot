@@ -1,9 +1,13 @@
 """시장 데이터 수집 — yfinance + pykrx 기반"""
 import pandas as pd
+import concurrent.futures
 from datetime import datetime, timedelta
 from utils.logger import setup_logger
 
 log = setup_logger("market_data")
+
+# API 호출 타임아웃 (초) — pykrx/yfinance hanging 방지
+_API_TIMEOUT = 10
 
 try:
     import yfinance as yf
@@ -21,30 +25,50 @@ def _krx_code(code: str) -> str:
     return code.zfill(6)
 
 
+def _call_with_timeout(fn, timeout=_API_TIMEOUT):
+    """함수를 별도 스레드에서 실행, timeout 초 초과시 None 반환"""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(fn)
+        try:
+            return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            return None
+        except Exception:
+            return None
+
+
 def get_stock_ohlcv(code: str, days: int = 120) -> pd.DataFrame:
-    """종목 OHLCV 조회 (pykrx 우선, yfinance 폴백)"""
+    """종목 OHLCV 조회 (pykrx 우선, yfinance 폴백) — 타임아웃 10초"""
     end = datetime.now().strftime("%Y%m%d")
     start = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
 
     if krx:
         try:
-            df = krx.get_market_ohlcv_by_date(start, end, _krx_code(code))
-            if not df.empty:
-                df = df.iloc[:, :5]  # 시가/고가/저가/종가/거래량 (7컬럼 중 앞 5개만)
+            result = _call_with_timeout(
+                lambda: krx.get_market_ohlcv_by_date(start, end, _krx_code(code))
+            )
+            if result is not None and not result.empty:
+                df = result.iloc[:, :5]
                 df.columns = ["open", "high", "low", "close", "volume"]
                 df.index.name = "date"
                 return df
+            if result is None:
+                log.warning(f"pykrx timeout ({code})")
         except Exception as e:
             log.warning(f"pykrx 조회 실패 ({code}): {e}")
 
     if yf:
         try:
-            ticker = f"{_krx_code(code)}.KS"
-            df = yf.download(ticker, period=f"{days}d", progress=False)
-            if not df.empty:
+            result = _call_with_timeout(
+                lambda: yf.download(f"{_krx_code(code)}.KS", period=f"{days}d", progress=False)
+            )
+            if result is not None and not result.empty:
+                df = result.copy()
                 df.columns = [c.lower() for c in df.columns]
                 df = df[["open", "high", "low", "close", "volume"]]
                 return df
+            if result is None:
+                log.warning(f"yfinance timeout ({code})")
         except Exception as e:
             log.warning(f"yfinance 조회 실패 ({code}): {e}")
 

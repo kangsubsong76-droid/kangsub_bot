@@ -1114,27 +1114,32 @@ class MainEngine:
     # ── 내부 헬퍼 ──
 
     def _generate_signals(self):
+        log.info("[signal] 시장 데이터 조회 시작")
         kospi_df = get_kospi_ohlcv(60)
         usdkrw_df = get_usdkrw(14)
         vkospi = get_vkospi()
+        log.info(f"[signal] 코스피 {len(kospi_df)}행 / VKOSPI {vkospi}")
         market = analyze_market(kospi_df, vkospi, usdkrw_df) if not kospi_df.empty else None
         if market is None:
-            log.warning("시장 데이터 없음 — 시그널 생성 스킵")
+            log.warning("[signal] 시장 데이터 없음 — 시그널 생성 스킵")
             return []
+        log.info(f"[signal] 시장 판단: {market.kospi_trend} / 점수 {market.score:.0f}")
 
         news_scores = {
             code: self.news_analyzer.get_stock_news_score(code, self._cached_news)
             for code in get_unique_codes()
         }
 
+        from config.universe import get_stock_name
+        codes = get_unique_codes()
+        log.info(f"[signal] 종목 OHLCV 조회 시작: {len(codes)}종목")
         tech_signals = []
-        for code in get_unique_codes():
+        for i, code in enumerate(codes, 1):
             ohlcv = get_stock_ohlcv(code, 120)
             if len(ohlcv) < 30:
+                log.debug(f"[signal] {code} 데이터 부족({len(ohlcv)}행) — 스킵")
                 continue
-            from config.universe import get_stock_name
             ts = tech_analyze(ohlcv, code, get_stock_name(code))
-            # 실시간 PER/PBR/ROE 주입 (캐시 7일 이내)
             funda = get_fundamentals(code)
             if funda:
                 ts.per = funda.get("per")
@@ -1142,8 +1147,14 @@ class MainEngine:
                 ts.roe = funda.get("roe")
                 ts.div_yield = funda.get("div_yield")
             tech_signals.append(ts)
+            if i % 10 == 0:
+                log.info(f"[signal] OHLCV 진행: {i}/{len(codes)}")
 
-        return self.signal_engine.generate_batch_signals(tech_signals, market, news_scores)
+        log.info(f"[signal] 시그널 생성: {len(tech_signals)}종목 분석 완료")
+        signals = self.signal_engine.generate_batch_signals(tech_signals, market, news_scores)
+        buy_count = sum(1 for s in signals if s.action == "BUY")
+        log.info(f"[signal] 결과 — BUY:{buy_count} / 전체:{len(signals)}")
+        return signals
 
     def _get_sector(self, code: str) -> str:
         for sec_key, sec in SECTORS.items():
