@@ -1491,7 +1491,59 @@ def _dashboard_watchdog():
 
 # ── 진입점 ──
 
+def _kill_existing_bot():
+    """기존 실행 중인 봇 프로세스 종료 (중복 실행 방지)"""
+    try:
+        import psutil
+        current_pid = os.getpid() if 'os' in dir() else __import__('os').getpid()
+        current_pid = __import__('os').getpid()
+        killed = []
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.pid == current_pid:
+                    continue
+                cmdline = proc.info.get('cmdline') or []
+                cmdline_str = ' '.join(cmdline).lower()
+                # main.py 를 실행 중인 py/python 프로세스 종료
+                if ('main.py' in cmdline_str and
+                        any(x in (proc.info.get('name') or '').lower()
+                            for x in ('py', 'python'))):
+                    proc.terminate()
+                    killed.append(proc.pid)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        if killed:
+            time.sleep(2)  # 종료 대기
+            print(f"[STARTUP] 기존 봇 프로세스 종료: PID {killed}")
+        else:
+            print("[STARTUP] 기존 봇 프로세스 없음 — 정상 시작")
+    except ImportError:
+        # psutil 없으면 OS 명령으로 fallback (Windows)
+        try:
+            import os, subprocess as _sp
+            result = _sp.run(
+                ['tasklist', '/FI', 'IMAGENAME eq py.exe', '/FO', 'CSV', '/NH'],
+                capture_output=True, text=True
+            )
+            for line in result.stdout.strip().splitlines():
+                parts = line.strip('"').split('","')
+                if len(parts) >= 2:
+                    pid = int(parts[1])
+                    if pid != __import__('os').getpid():
+                        _sp.run(['taskkill', '/PID', str(pid), '/F'],
+                                capture_output=True)
+            time.sleep(2)
+            print("[STARTUP] 기존 py.exe 프로세스 정리 완료")
+        except Exception as e:
+            print(f"[STARTUP] 프로세스 정리 실패 (무시): {e}")
+    except Exception as e:
+        print(f"[STARTUP] 프로세스 정리 오류 (무시): {e}")
+
+
 if __name__ == "__main__":
+    # 기존 봇 프로세스 먼저 종료 (텔레그램 Conflict 방지)
+    _kill_existing_bot()
+
     parser = argparse.ArgumentParser(description="KangSub Bot")
     parser.add_argument("--paper", action="store_true", help="페이퍼 트레이딩 모드")
     parser.add_argument("--once", action="store_true", help="1회 시그널 생성 후 종료")
