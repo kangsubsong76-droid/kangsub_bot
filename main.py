@@ -1496,60 +1496,47 @@ _BOT_PID_FILE = Path(r"C:\kangsub_bot\bot.pid")
 
 def _kill_existing_bot():
     """
-    기존 봇 프로세스 종료 — PID 파일 기반 (가장 확실한 방법)
-    1순위: bot.pid 파일에 저장된 PID를 taskkill
-    2순위: wmic으로 py.exe 전체 스캔 후 현재 PID 제외 종료
+    기존 봇 프로세스 종료 — PID 파일 기반
+    - bot.pid 에 저장된 이전 PID만 taskkill (자기 자신 / 부모 제외)
+    - wmic 전체 스캔 없음 (py.exe 런처와 python.exe 혼재로 오인 종료 방지)
     """
     import os as _os
     import subprocess as _sp
-    my_pid = _os.getpid()
 
-    # ── 1순위: PID 파일 ──────────────────────────────────────
+    my_pid    = _os.getpid()
+    # py main.py 로 실행 시 py.exe(런처) PID가 부모 → 함께 보호
+    try:
+        parent_pid = _os.getppid()
+    except Exception:
+        parent_pid = 0
+    safe_pids = {my_pid, parent_pid}
+
+    # ── PID 파일에서 이전 봇 PID 읽어 종료 ──────────────────
     if _BOT_PID_FILE.exists():
         try:
-            old_pid = int(_BOT_PID_FILE.read_text().strip())
-            if old_pid != my_pid:
+            # utf-8-sig: BOM 자동 제거
+            raw = _BOT_PID_FILE.read_text(encoding='utf-8-sig').strip()
+            old_pid = int(raw)
+            if old_pid and old_pid not in safe_pids:
                 result = _sp.run(
                     ['taskkill', '/PID', str(old_pid), '/F'],
                     capture_output=True, text=True
                 )
-                if 'SUCCESS' in result.stdout or result.returncode == 0:
-                    print(f"[STARTUP] 기존 봇 종료 (PID {old_pid})")
-                else:
-                    print(f"[STARTUP] PID {old_pid} 종료 시도 (이미 없을 수 있음)")
-                time.sleep(3)  # 텔레그램 세션 해제 대기
+                print(f"[STARTUP] 기존 봇 종료 (PID {old_pid})")
+                time.sleep(3)  # 텔레그램 서버 측 세션 해제 대기
+            else:
+                print("[STARTUP] 기존 봇 없음 (PID 동일 또는 파일 비어있음)")
         except Exception as e:
-            print(f"[STARTUP] PID 파일 처리 오류: {e}")
+            print(f"[STARTUP] PID 파일 오류: {e}")
+    else:
+        print("[STARTUP] bot.pid 없음 — 첫 실행")
 
-    # ── 2순위: wmic 전체 스캔 (PID 파일 없거나 누락된 경우) ──
+    # ── 현재 PID 저장 (utf-8, BOM 없이) ─────────────────────
     try:
-        result = _sp.run(
-            'wmic process where "name=\'py.exe\' or name=\'python.exe\'" get ProcessId /format:value',
-            shell=True, capture_output=True, text=True
-        )
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if line.startswith('ProcessId='):
-                try:
-                    pid = int(line.split('=')[1])
-                    if pid and pid != my_pid:
-                        _sp.run(['taskkill', '/PID', str(pid), '/F'],
-                                capture_output=True)
-                        print(f"[STARTUP] 잔존 프로세스 종료 (PID {pid})")
-                        time.sleep(1)
-                except ValueError:
-                    pass
+        _BOT_PID_FILE.write_text(str(my_pid), encoding='utf-8')
+        print(f"[STARTUP] 봇 시작 — PID {my_pid}")
     except Exception as e:
-        print(f"[STARTUP] wmic 스캔 실패 (무시): {e}")
-
-    # ── 현재 PID 저장 ─────────────────────────────────────────
-    try:
-        _BOT_PID_FILE.write_text(str(my_pid))
-    except Exception:
-        pass
-
-    time.sleep(2)  # 텔레그램 서버 측 세션 해제 대기
-    print(f"[STARTUP] 봇 시작 — PID {my_pid}")
+        print(f"[STARTUP] PID 저장 실패: {e}")
 
 
 if __name__ == "__main__":
