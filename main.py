@@ -1491,53 +1491,65 @@ def _dashboard_watchdog():
 
 # ── 진입점 ──
 
+_BOT_PID_FILE = Path(r"C:\kangsub_bot\bot.pid")
+
+
 def _kill_existing_bot():
-    """기존 실행 중인 봇 프로세스 종료 (중복 실행 방지)"""
-    try:
-        import psutil
-        current_pid = os.getpid() if 'os' in dir() else __import__('os').getpid()
-        current_pid = __import__('os').getpid()
-        killed = []
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            try:
-                if proc.pid == current_pid:
-                    continue
-                cmdline = proc.info.get('cmdline') or []
-                cmdline_str = ' '.join(cmdline).lower()
-                # main.py 를 실행 중인 py/python 프로세스 종료
-                if ('main.py' in cmdline_str and
-                        any(x in (proc.info.get('name') or '').lower()
-                            for x in ('py', 'python'))):
-                    proc.terminate()
-                    killed.append(proc.pid)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-        if killed:
-            time.sleep(2)  # 종료 대기
-            print(f"[STARTUP] 기존 봇 프로세스 종료: PID {killed}")
-        else:
-            print("[STARTUP] 기존 봇 프로세스 없음 — 정상 시작")
-    except ImportError:
-        # psutil 없으면 OS 명령으로 fallback (Windows)
+    """
+    기존 봇 프로세스 종료 — PID 파일 기반 (가장 확실한 방법)
+    1순위: bot.pid 파일에 저장된 PID를 taskkill
+    2순위: wmic으로 py.exe 전체 스캔 후 현재 PID 제외 종료
+    """
+    import os as _os
+    import subprocess as _sp
+    my_pid = _os.getpid()
+
+    # ── 1순위: PID 파일 ──────────────────────────────────────
+    if _BOT_PID_FILE.exists():
         try:
-            import os, subprocess as _sp
-            result = _sp.run(
-                ['tasklist', '/FI', 'IMAGENAME eq py.exe', '/FO', 'CSV', '/NH'],
-                capture_output=True, text=True
-            )
-            for line in result.stdout.strip().splitlines():
-                parts = line.strip('"').split('","')
-                if len(parts) >= 2:
-                    pid = int(parts[1])
-                    if pid != __import__('os').getpid():
+            old_pid = int(_BOT_PID_FILE.read_text().strip())
+            if old_pid != my_pid:
+                result = _sp.run(
+                    ['taskkill', '/PID', str(old_pid), '/F'],
+                    capture_output=True, text=True
+                )
+                if 'SUCCESS' in result.stdout or result.returncode == 0:
+                    print(f"[STARTUP] 기존 봇 종료 (PID {old_pid})")
+                else:
+                    print(f"[STARTUP] PID {old_pid} 종료 시도 (이미 없을 수 있음)")
+                time.sleep(3)  # 텔레그램 세션 해제 대기
+        except Exception as e:
+            print(f"[STARTUP] PID 파일 처리 오류: {e}")
+
+    # ── 2순위: wmic 전체 스캔 (PID 파일 없거나 누락된 경우) ──
+    try:
+        result = _sp.run(
+            'wmic process where "name=\'py.exe\' or name=\'python.exe\'" get ProcessId /format:value',
+            shell=True, capture_output=True, text=True
+        )
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.startswith('ProcessId='):
+                try:
+                    pid = int(line.split('=')[1])
+                    if pid and pid != my_pid:
                         _sp.run(['taskkill', '/PID', str(pid), '/F'],
                                 capture_output=True)
-            time.sleep(2)
-            print("[STARTUP] 기존 py.exe 프로세스 정리 완료")
-        except Exception as e:
-            print(f"[STARTUP] 프로세스 정리 실패 (무시): {e}")
+                        print(f"[STARTUP] 잔존 프로세스 종료 (PID {pid})")
+                        time.sleep(1)
+                except ValueError:
+                    pass
     except Exception as e:
-        print(f"[STARTUP] 프로세스 정리 오류 (무시): {e}")
+        print(f"[STARTUP] wmic 스캔 실패 (무시): {e}")
+
+    # ── 현재 PID 저장 ─────────────────────────────────────────
+    try:
+        _BOT_PID_FILE.write_text(str(my_pid))
+    except Exception:
+        pass
+
+    time.sleep(2)  # 텔레그램 서버 측 세션 해제 대기
+    print(f"[STARTUP] 봇 시작 — PID {my_pid}")
 
 
 if __name__ == "__main__":
@@ -1589,4 +1601,10 @@ if __name__ == "__main__":
         if _dashboard_proc and _dashboard_proc.poll() is None:
             _dashboard_proc.terminate()
             log.info("대시보드 서버 종료")
+        # PID 파일 삭제 (정상 종료 시)
+        try:
+            if _BOT_PID_FILE.exists():
+                _BOT_PID_FILE.unlink()
+        except Exception:
+            pass
         log.info("KangSub Bot 종료")
