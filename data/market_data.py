@@ -101,7 +101,8 @@ def get_stock_ohlcv(code: str, days: int = 120) -> pd.DataFrame:
         )
         if result is not None and not result.empty:
             df = result.copy()
-            df.columns = [c.lower() for c in df.columns]
+            # yfinance >= 0.2 는 MultiIndex columns ('Close', 'TICKER') 반환 → 첫 레벨만 사용
+            df.columns = [(c[0] if isinstance(c, tuple) else c).lower() for c in df.columns]
             return df[["open", "high", "low", "close", "volume"]]
         if result is None:
             log.warning(f"yfinance timeout ({code})")
@@ -153,7 +154,7 @@ def get_kospi_ohlcv(days: int = 120) -> pd.DataFrame:
         )
         if result is not None and not result.empty:
             df = result.copy()
-            df.columns = [c.lower() for c in df.columns]
+            df.columns = [(c[0] if isinstance(c, tuple) else c).lower() for c in df.columns]
             return df[["open", "high", "low", "close", "volume"]]
 
     return pd.DataFrame()
@@ -171,7 +172,7 @@ def get_usdkrw(days: int = 30) -> pd.DataFrame:
         )
         if result is not None and not result.empty:
             df = result.copy()
-            df.columns = [c.lower() for c in df.columns]
+            df.columns = [(c[0] if isinstance(c, tuple) else c).lower() for c in df.columns]
             return df[["close"]]
     return pd.DataFrame()
 
