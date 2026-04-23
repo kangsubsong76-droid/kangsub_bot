@@ -7,6 +7,12 @@ KangSub Bot — 메인 실행 파일
   python main.py --paper     # 강제 페이퍼 트레이딩
   python main.py --once      # 1회 시그널 생성 후 종료
 """
+import sys, io
+# EC2 Windows 콘솔 인코딩(cp1252) → UTF-8 강제 (한글 UnicodeEncodeError 방지)
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 import os
 import sys
 import json
@@ -1726,21 +1732,21 @@ def _kill_existing_bot():
                     ['taskkill', '/PID', str(old_pid), '/F'],
                     capture_output=True, text=True
                 )
-                print(f"[STARTUP] 기존 봇 종료 (PID {old_pid})")
-                time.sleep(3)  # 텔레그램 서버 측 세션 해제 대기
+                print(f"[STARTUP] killed old bot (PID {old_pid})")
+                time.sleep(3)
             else:
-                print("[STARTUP] 기존 봇 없음 (PID 동일 또는 파일 비어있음)")
+                print("[STARTUP] no old bot (same PID or empty)")
         except Exception as e:
-            print(f"[STARTUP] PID 파일 오류: {e}")
+            print(f"[STARTUP] PID file error: {e}")
     else:
-        print("[STARTUP] bot.pid 없음 — 첫 실행")
+        print("[STARTUP] no bot.pid — first run")
 
     # ── 현재 PID 저장 (utf-8, BOM 없이) ─────────────────────
     try:
         _BOT_PID_FILE.write_text(str(my_pid), encoding='utf-8')
-        print(f"[STARTUP] 봇 시작 — PID {my_pid}")
+        print(f"[STARTUP] bot started — PID {my_pid}")
     except Exception as e:
-        print(f"[STARTUP] PID 저장 실패: {e}")
+        print(f"[STARTUP] PID save error: {e}")
 
 
 if __name__ == "__main__":
