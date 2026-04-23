@@ -105,13 +105,14 @@ $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
     -RunOnlyIfNetworkAvailable
 
-# Use current logged-in user (guarantees PATH, environment variables)
+# Use current logged-in user with S4U logon (runs even when disconnected from RDP)
+# S4U = Service For User: no password stored, runs without interactive session
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 Write-Host "  Account: $currentUser" -ForegroundColor Green
 
 $principal = New-ScheduledTaskPrincipal `
     -UserId   $currentUser `
-    -LogonType Interactive `
+    -LogonType S4U `
     -RunLevel Highest
 
 Register-ScheduledTask `
