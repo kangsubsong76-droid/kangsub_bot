@@ -1,5 +1,6 @@
 """텔레그램 봇 — 양방향 알림 + 명령 처리"""
 import sys
+import time
 import asyncio
 
 if sys.platform == 'win32':
@@ -469,24 +470,49 @@ class TelegramCommandBot:
         self.app.run_polling()
 
     def run_in_thread(self):
-        """서브 스레드에서 안전하게 실행"""
+        """서브 스레드에서 안전하게 실행 — Conflict 자동 재시도"""
         import asyncio
+        from telegram.error import Conflict
 
-        if self.app is None:
-            self.build()
+        retry_delay = 90   # 첫 재시도: 90초
+        attempt = 0
 
-        async def _polling():
-            async with self.app:
-                await self.app.start()
-                await self.app.updater.start_polling(drop_pending_updates=True)
-                log.info("Telegram bot polling started")
-                await asyncio.Event().wait()
+        while True:
+            attempt += 1
+            # 재시도 시 app 재생성 (이전 세션 상태 초기화)
+            if attempt > 1:
+                self.app = None
+            if self.app is None:
+                self.build()
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(_polling())
-        except Exception as e:
-            log.error(f"Telegram bot error: {e}")
-        finally:
-            loop.close()
+            async def _polling():
+                async with self.app:
+                    await self.app.start()
+                    await self.app.updater.start_polling(drop_pending_updates=True)
+                    log.info(f"Telegram bot polling started (attempt {attempt})")
+                    await asyncio.Event().wait()
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(_polling())
+                break  # 정상 종료
+            except Conflict:
+                log.warning(
+                    f"Telegram Conflict 감지 (attempt {attempt}) — "
+                    f"{retry_delay}초 후 자동 재시도"
+                )
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 300)  # 최대 5분까지 증가
+            except Exception as e:
+                log.error(f"Telegram bot error: {e}")
+                break
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
