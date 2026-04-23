@@ -178,17 +178,9 @@ def api_status():
     funds     = _read(DATA_DIR / "fundamentals.json", {})
     sigs      = _read(DATA_STORE / "signals.json", [])
 
-    # 실전/페이퍼 여부: bot_status.json → config/settings.py → 기본값 False
-    paper = False
-    try:
-        bot_status = _read(DATA_STORE / "bot_status.json", {})
-        if "paper_trading" in bot_status:
-            paper = bot_status["paper_trading"]
-        else:
-            from config.settings import PAPER_TRADING as _PT
-            paper = _PT
-    except Exception:
-        paper = False
+    # 실전/페이퍼 여부: bot_status.json → 기본값 False (실전)
+    bot_status = _read(DATA_STORE / "bot_status.json", {})
+    paper = bot_status.get("paper_trading", False)
 
     return jsonify({
         "bot_running":    True,
@@ -351,6 +343,85 @@ def api_trading_plan():
         "total_capital": total_capital,
         "updated":       datetime.now().strftime("%H:%M:%S"),
     })
+
+
+@app.route("/api/bot_log")
+def api_bot_log():
+    """봇 실시간 활동 로그 — bot_activity.json + 스케줄러 + 체결 내역 합성"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    entries = []
+
+    # 1) 명시적 활동 로그 (utils/activity_log.py 기록)
+    for e in _read(DATA_STORE / "bot_activity.json", []):
+        if e.get("date", today) == today:
+            e["_sort"] = e.get("time", "")
+            entries.append(e)
+
+    # 2) 스케줄러 완료 항목
+    JOB_NAMES = {
+        "morning_health_check":      ("✅", "시스템 점검 완료"),
+        "collect_news":              ("📰", "뉴스 크롤링 완료"),
+        "collect_afterhours":        ("🕐", "시간외 단일가 수집 완료"),
+        "execute_nxt_buy":           ("⚡", "NXT 장전매수 실행"),
+        "analyze_news_signals":      ("🧠", "뉴스 시그널 분석 완료"),
+        "morning_briefing":          ("☀️", "모닝 브리핑 발송"),
+        "sync_manual_portfolio_prices": ("🔄", "현재가 동기화 완료"),
+        "reconcile_portfolio":       ("🔍", "포트폴리오 검증 완료"),
+        "execute_buy_signals":       ("💹", "PAM 매수 시그널 처리"),
+        "monitor_stop_loss":         ("🛡", "리스크 점검 완료"),
+        "midday_report":             ("🕛", "중간 리포트 발송"),
+        "pre_close_check":           ("⚠️", "마감 전 확인 완료"),
+        "save_portfolio_snapshot":   ("📷", "포트폴리오 스냅샷 저장"),
+        "check_dart_disclosures":    ("📋", "DART 공시 체크 완료"),
+        "update_nxt_result":         ("📊", "NXT 패턴DB 업데이트"),
+        "daily_report":              ("📈", "일일 리포트 발송"),
+        "update_technical_signals":  ("📡", "기술적 분석 업데이트"),
+        "check_global_market":       ("🌍", "글로벌 시장 체크 완료"),
+        "collect_surge_top50":       ("🚀", "급상승 Top50 수집 완료"),
+    }
+    status = _read(DATA_STORE / "scheduler_status.json", {})
+    for fn_name, (icon, label) in JOB_NAMES.items():
+        s = status.get(fn_name, {})
+        last = s.get("last_run", "")
+        if not last.startswith(today):
+            continue
+        time_str = s.get("time", last[11:19] if len(last) > 19 else "--:--:--")
+        st = s.get("status", "completed")
+        level = "ERROR" if st == "error" else "INFO"
+        err_txt = f" — {s['error'][:40]}" if st == "error" and s.get("error") else ""
+        entries.append({
+            "time": time_str[:8] if len(time_str) >= 8 else time_str,
+            "level": level,
+            "msg": f"{icon} {label}{err_txt}",
+            "_sort": time_str,
+        })
+
+    # 3) 오늘 체결 내역
+    trades = _read(DATA_STORE / "trades.json", [])
+    for t in trades:
+        ts = str(t.get("timestamp", ""))
+        if not ts.startswith(today):
+            continue
+        side = t.get("side", t.get("type", "?"))
+        name = t.get("name", t.get("stock_name", t.get("code", "?")))
+        qty  = t.get("qty", t.get("quantity", 0))
+        price = t.get("price", 0)
+        pnl   = t.get("pnl", t.get("pnl_amount"))
+        time_str = ts[11:19] if len(ts) > 19 else ts[11:] if len(ts) > 11 else "--:--:--"
+        pnl_txt = f" ({'+' if pnl >= 0 else ''}{pnl:,.0f}원)" if pnl is not None else ""
+        entries.append({
+            "time": time_str,
+            "level": "TRADE",
+            "msg": f"🔵 {side} — {name} {qty:,}주 @ {price:,.0f}원{pnl_txt}",
+            "_sort": ts,
+        })
+
+    # 시간 순 정렬 + _sort 제거
+    entries.sort(key=lambda x: x.get("_sort", ""))
+    for e in entries:
+        e.pop("_sort", None)
+
+    return jsonify(entries[-80:])
 
 
 def run_dashboard(host="0.0.0.0", port=8080):

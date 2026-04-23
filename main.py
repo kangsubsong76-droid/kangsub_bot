@@ -46,6 +46,7 @@ from core.kiwoom_rest import KiwoomRestAPI
 from notification.notion_logger import NotionLogger
 from scheduler.jobs import TradingScheduler
 from utils.logger import setup_logger
+from utils import activity_log as alog
 
 log = setup_logger("main", LOG_DIR)
 
@@ -130,10 +131,12 @@ class MainEngine:
 
     def collect_news(self):
         log.info("[07:00] 뉴스 크롤링 시작")
+        alog.info("📰 뉴스 크롤링 시작")
         codes = list(get_unique_codes())[:10]
         self._cached_news = self.news_analyzer.collect_all_news(codes)
         self._cached_news = self.news_analyzer.process_news(self._cached_news)
         log.info(f"뉴스 {len(self._cached_news)}건 수집 완료")
+        alog.info(f"📰 뉴스 {len(self._cached_news)}건 수집 · 분석 완료")
         for news in self._cached_news[:5]:
             self.notion.log_news({
                 "title": news.title,
@@ -146,6 +149,7 @@ class MainEngine:
 
     def analyze_news_signals(self):
         log.info("[08:00] 뉴스 시그널 분석")
+        alog.ai("🧠 뉴스 시그널 분석 시작")
         if not self._cached_news:
             self.collect_news()
         codes = get_unique_codes()
@@ -154,6 +158,7 @@ class MainEngine:
             for code in codes
         }
         log.info(f"뉴스 시그널 {len(news_scores)}종목 분석 완료")
+        alog.ai(f"🧠 뉴스 시그널 {len(news_scores)}종목 분석 완료")
         return news_scores
 
     def morning_briefing(self):
@@ -209,6 +214,7 @@ class MainEngine:
         if not self.auto_trading:
             return
         log.info("[09:00] PAM Phase 2 — 매수 실행")
+        alog.info("💹 PAM 매수 시그널 분석 시작")
 
         from config.settings import PAM_BUY_RATIO, PAM_MAX_HOLDINGS, TOTAL_CAPITAL
         signals = self._generate_signals()
@@ -306,6 +312,7 @@ class MainEngine:
 
         log.info(f"PAM Phase 2 완료: {bought_count}종목 매수, "
                  f"현금 잔고 {self.portfolio.cash:,.0f}원")
+        alog.info(f"💹 PAM 매수 완료 — {bought_count}종목 / 잔고 {self.portfolio.cash:,.0f}원")
 
     def monitor_stop_loss(self):
         if not self.portfolio.holdings:
@@ -1008,6 +1015,7 @@ class MainEngine:
         if not self.auto_trading:
             return
         log.info("[08:00] NXT 매수 실행")
+        alog.info("⚡ NXT 장전매수 시작")
 
         from config.settings import TOTAL_CAPITAL, NXT_BUDGET_RATIO, NXT_MAX_STOCKS
 
@@ -1378,7 +1386,103 @@ class MainEngine:
             self.auto_trading = True
             return "▶️ 자동매매 재개"
         elif command == "balance":
-            return f"현금: {summary['cash']:,.0f}원"
+            invested = summary["total_value"] - summary["cash"]
+            total_pnl_pct = summary["total_pnl"]
+            return (
+                f"💰 <b>잔고 현황</b> [{datetime.now():%H:%M}]\n"
+                f"현금: {summary['cash']:,.0f}원\n"
+                f"주식평가: {invested:,.0f}원\n"
+                f"총 평가: {summary['total_value']:,.0f}원\n"
+                f"수익률: {total_pnl_pct:+.2%}\n"
+                f"보유종목: {summary['num_holdings']}개"
+            )
+
+        elif command == "holdings":
+            holdings_list = summary.get("holdings", [])
+            if not holdings_list:
+                return "📦 보유 종목 없음"
+            lines = []
+            for h in holdings_list:
+                pnl_pct = h.get("pnl_pct", 0.0)
+                cur = h.get("current", h.get("current_price", 0))
+                avg = h.get("avg_price", 0)
+                qty = h.get("qty", 0)
+                name = h.get("name", h.get("code", "?"))
+                code = h.get("code", "")
+                pnl_val = (cur - avg) * qty if cur and avg and qty else 0
+                emoji = "🟢" if pnl_pct >= 0 else "🔴"
+                lines.append(
+                    f"{emoji} <b>{name}</b> ({code})\n"
+                    f"   {qty:,}주 @ {avg:,.0f}원 → {cur:,.0f}원\n"
+                    f"   손익: {pnl_val:+,.0f}원 ({pnl_pct:+.2%})"
+                )
+            header = (
+                f"📦 <b>보유 종목 ({len(holdings_list)}개)</b> [{datetime.now():%H:%M}]\n"
+                f"{'─' * 24}\n"
+            )
+            footer = (
+                f"\n{'─' * 24}\n"
+                f"💰 현금: {summary['cash']:,.0f}원"
+            )
+            return header + "\n".join(lines) + footer
+
+        elif command == "signals":
+            # 마지막으로 생성된 시그널 목록을 텔레그램으로 전송
+            import threading
+            def _show_signals():
+                try:
+                    sigs = self._generate_signals()
+                    buy  = [s for s in sigs if s.action == "BUY"]
+                    hold = [s for s in sigs if s.action == "HOLD"]
+                    if buy:
+                        lines = "\n".join(
+                            f"  🟢 {s.name} ({s.code}) 점수:{s.weighted_score:.0f}"
+                            for s in buy[:8]
+                        )
+                    else:
+                        lines = "  없음"
+                    self.notifier._send_http(
+                        f"📡 <b>시그널 현황</b> [{datetime.now():%H:%M}]\n"
+                        f"BUY: {len(buy)}개 / HOLD: {len(hold)}개\n"
+                        f"{'─' * 24}\n"
+                        f"{lines}"
+                    )
+                except Exception as e:
+                    self.notifier._send_http(f"❌ signals 오류: {e}")
+            threading.Thread(target=_show_signals, daemon=True, name="SignalsList").start()
+            return "📡 시그널 조회 중... (결과는 텔레그램으로 전송)"
+
+        elif command == "risk":
+            holdings_list = summary.get("holdings", [])
+            if not holdings_list:
+                return "✅ 보유 종목 없음 — 리스크 없음"
+            from config.settings import TRAILING_STOP
+            lines = []
+            for h in holdings_list:
+                pnl_pct = h.get("pnl_pct", 0.0)
+                cur = h.get("current", h.get("current_price", 0))
+                avg = h.get("avg_price", 0)
+                name = h.get("name", h.get("code", "?"))
+                # 트레일링 스탑 한도 계산
+                threshold = 0.0
+                for (lo, hi), thr in TRAILING_STOP.items():
+                    if lo <= pnl_pct < hi:
+                        threshold = thr
+                        break
+                emoji = "🟢" if pnl_pct >= 0 else "🔴"
+                lines.append(
+                    f"{emoji} <b>{name}</b>\n"
+                    f"   수익률: {pnl_pct:+.2%} | 손절한도: -{threshold:.0%}\n"
+                    f"   현재: {cur:,.0f}원 / 매입: {avg:,.0f}원"
+                )
+            total_pnl = summary["total_pnl"]
+            portfolio_status = "⚠️ 위험" if total_pnl <= -0.10 else ("🟡 주의" if total_pnl <= -0.05 else "✅ 정상")
+            header = (
+                f"🛡 <b>리스크 현황</b> [{datetime.now():%H:%M}]\n"
+                f"포트폴리오 수익률: {total_pnl:+.2%} {portfolio_status}\n"
+                f"{'─' * 24}\n"
+            )
+            return header + "\n".join(lines)
 
         elif command == "run_now":
             # 누락된 잡 체인 수동 실행 (백그라운드 스레드)

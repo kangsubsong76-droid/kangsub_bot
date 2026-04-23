@@ -373,12 +373,38 @@ class TelegramCommandBot:
             await update.message.reply_text("Resumed auto-trading")
 
     async def cmd_sync(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        import subprocess
+        """git pull → 봇 재시작 (Task Scheduler Stop/Start)"""
+        import subprocess, sys
+        BOT_DIR = "C:\\kangsub_bot"
+        GIT_EXE = "C:\\Program Files\\Git\\bin\\git.exe"
+
+        await update.message.reply_text("🔄 git pull 시작...")
+
+        # 1) git pull (절대경로 + 작업 디렉토리 명시)
+        git_cmd = GIT_EXE if __import__("os").path.exists(GIT_EXE) else "git"
         try:
-            result = subprocess.run(["git", "pull"], capture_output=True, text=True, timeout=30)
-            await update.message.reply_text(f"Git sync:\n{result.stdout}")
+            r = subprocess.run(
+                [git_cmd, "-C", BOT_DIR, "pull"],
+                capture_output=True, text=True, timeout=30
+            )
+            out = (r.stdout + r.stderr).strip()[:400] or "변경 없음"
         except Exception as e:
-            await update.message.reply_text(f"Sync failed: {e}")
+            await update.message.reply_text(f"❌ git pull 실패: {e}")
+            return
+
+        await update.message.reply_text(f"📥 git pull 완료:\n{out}\n\n⏳ 봇 재시작 중... (30초 후 재가동)")
+
+        # 2) Task Scheduler Stop → Start (5초 후 실행 → reply 전달 시간 확보)
+        restart_cmd = (
+            "Start-Sleep 5; "
+            "Stop-ScheduledTask -TaskName KangSubBot -ErrorAction SilentlyContinue; "
+            "Start-Sleep 5; "
+            "Start-ScheduledTask -TaskName KangSubBot"
+        )
+        subprocess.Popen(
+            ["powershell", "-NonInteractive", "-Command", restart_cmd],
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
 
     async def cmd_audit(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Running audit...")
