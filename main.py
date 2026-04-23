@@ -542,7 +542,7 @@ class MainEngine:
         — 현금 또는 총평가 차이 1% 초과 시 텔레그램 경고 + 자동 수정
 
         검증 흐름:
-          1) ka01002 (get_portfolio_holdings) 로 실 계좌 조회
+          1) kt00004 (get_portfolio_holdings) 로 실 계좌 조회
           2) portfolio_manual.json 값과 비교
           3) 차이 > 1% → 자동 수정 + 텔레그램 알림
           4) 차이 ≤ 1% → "일치 확인" 로그만
@@ -562,13 +562,13 @@ class MainEngine:
         manual_total = manual.get("total_value", 0)
         manual_cash  = manual.get("cash", 0)
 
-        # ── ka01002 실 API 조회 ──
+        # ── kt00004 실 API 조회 ──
         api_data = None
         if self.kiwoom:
             try:
                 api_data = self.kiwoom.get_portfolio_holdings()
             except Exception as e:
-                log.warning(f"reconcile: ka01002 조회 실패 — {e}")
+                log.warning(f"reconcile: kt00004 조회 실패 — {e}")
 
         if not api_data or api_data.get("total_value", 0) == 0:
             log.info("reconcile: API 데이터 없음 — 검증 스킵")

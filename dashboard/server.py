@@ -62,7 +62,7 @@ def api_portfolio():
     if manual and manual.get("cash", 0) > 0:
         return jsonify(manual)
 
-    # 2) Kiwoom ka01002 — 계좌평가잔고내역 (수동매수 포함 전체 보유종목)
+    # 2) Kiwoom kt00004 — 계좌평가현황요청 (수동매수 포함 전체 보유종목)
     if _kiwoom:
         try:
             holdings = _kiwoom.get_portfolio_holdings()
@@ -71,7 +71,7 @@ def api_portfolio():
         except Exception:
             pass
 
-    # 3) Kiwoom ka01690 — 봇 거래 내역 기반 잔고 (수동매수 미포함)
+    # 3) Kiwoom kt00001 — 예수금상세현황 (현금 위주, 수동매수 미포함)
     if _kiwoom:
         try:
             balance = _kiwoom.get_balance()
