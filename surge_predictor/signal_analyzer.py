@@ -221,9 +221,10 @@ def call_claude_api(prompt):
         return None
 
     headers = {
-        "Content-Type":    "application/json",
-        "x-api-key":       api_key,
-        "anthropic-version": "2023-06-01"
+        "Content-Type":      "application/json",
+        "x-api-key":         api_key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta":    "web-search-2025-03-05",  # web_search_20250305 툴 활성화 필수
     }
     body = {
         "model":      MODEL,
@@ -235,13 +236,23 @@ def call_claude_api(prompt):
     try:
         log.info("Claude API 호출 중...")
         resp = requests.post(ANTHROPIC_API_URL, headers=headers, json=body, timeout=90)
+        if not resp.ok:
+            # 오류 상세 로깅 (400/401/429 등 원인 파악용)
+            try:
+                err_body = resp.json()
+                log.error(f"Claude API HTTP {resp.status_code}: {err_body.get('error', {}).get('message', resp.text[:300])}")
+            except Exception:
+                log.error(f"Claude API HTTP {resp.status_code}: {resp.text[:300]}")
+            return None
         resp.raise_for_status()
         data = resp.json()
         full_text = "".join(
             b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
         )
+        if not full_text:
+            log.warning(f"Claude 응답 텍스트 없음 — content 블록 수: {len(data.get('content', []))}")
         log.info("Claude API 응답 수신 완료")
-        return full_text
+        return full_text or None
     except Exception as e:
         log.error(f"Claude API 오류: {e}")
         return None
