@@ -372,7 +372,18 @@ class MainEngine:
         })
         # 대시보드용 JSON 저장
         path = DATA_DIR / "portfolio_snapshot.json"
-        path.write_text(json.dumps({**summary, "total_capital": self.portfolio.total_capital}, ensure_ascii=False, indent=2))
+        def _json_safe(obj):
+            """numpy int64 등 비직렬화 타입을 Python 기본 타입으로 변환"""
+            import numpy as np
+            if isinstance(obj, (np.integer,)): return int(obj)
+            if isinstance(obj, (np.floating,)): return float(obj)
+            if isinstance(obj, np.ndarray): return obj.tolist()
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+        path.write_text(
+            json.dumps({**summary, "total_capital": self.portfolio.total_capital},
+                       ensure_ascii=False, indent=2, default=_json_safe),
+            encoding='utf-8'
+        )
         self.portfolio._save()
         log.info("Portfolio snapshot saved")
 
@@ -673,7 +684,7 @@ class MainEngine:
              "news_score": s.news_score, "weighted_score": s.weighted_score,
              "reasons": s.reasons}
             for s in signals
-        ], ensure_ascii=False, indent=2))
+        ], ensure_ascii=False, indent=2), encoding='utf-8')
 
     # ── NXT 전략 (장전거래 08:00) ──────────────────────────
 
