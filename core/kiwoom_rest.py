@@ -14,18 +14,19 @@
   next-key      : 연속조회키                [선택]
 
 주요 API 목록:
-  au10001  접근토큰발급   POST /oauth2/token
-  ka00001  계좌번호조회   POST /api/dostk/acnt
-  ka01690  일별잔고수익률 POST /api/dostk/acnt
-  ka10001  주식기본정보   POST /api/dostk/stkinfo
-  ka10002  주식거래원요청 POST /api/dostk/stkinfo
-  ka10081  주식일봉차트   POST /api/dostk/chart
-  ka10008  업종일봉차트   POST /api/dostk/chart  (001=KOSPI, 101=KOSDAQ)
-  ka10075  미체결요청     POST /api/dostk/acnt
-  kt10000  주식 매수주문  POST /api/dostk/ordr
-  kt10001  주식 매도주문  POST /api/dostk/ordr
-  kt10002  주식 정정주문  POST /api/dostk/ordr
-  kt10003  주식 취소주문  POST /api/dostk/ordr
+  au10001  접근토큰발급          POST /oauth2/token
+  ka00001  계좌번호조회          POST /api/dostk/acnt
+  kt00001  예수금상세현황요청    POST /api/dostk/acnt  (현금잔고, entr 필드)
+  kt00004  계좌평가현황요청      POST /api/dostk/acnt  (보유종목+현금, stk_acnt_evlt_prst 리스트)
+  ka10001  주식기본정보          POST /api/dostk/stkinfo
+  ka10002  주식거래원요청        POST /api/dostk/stkinfo
+  ka10081  주식일봉차트          POST /api/dostk/chart
+  ka10008  업종일봉차트          POST /api/dostk/chart  (001=KOSPI, 101=KOSDAQ)
+  ka10075  미체결요청            POST /api/dostk/acnt
+  kt10000  주식 매수주문         POST /api/dostk/ordr
+  kt10001  주식 매도주문         POST /api/dostk/ordr
+  kt10002  주식 정정주문         POST /api/dostk/ordr
+  kt10003  주식 취소주문         POST /api/dostk/ordr
 """
 import time
 import requests
@@ -152,49 +153,108 @@ class KiwoomRestAPI:
         return None
 
     # ════════════════════════════════════════════════════════
-    # ── 일별잔고수익률 (ka01690) — 잔고 + 보유종목 조회
+    # ── 예수금상세현황 (kt00001) — 현금잔고 조회
     # ════════════════════════════════════════════════════════
     def get_balance(self) -> dict:
         """
-        일별잔고수익률 조회 (ka01690)
-        ※ 모의투자 미지원 — 실전전용
+        예수금상세현황요청 (kt00001)
+        POST /api/dostk/acnt  api-id: kt00001
         반환: {cash, holdings, total_value, total_pnl, total_pnl_pct, ...}
+        현금(예수금) 필드: entr
         """
-        if self.mock:
-            log.warning("ka01690은 모의투자 미지원 — 빈 잔고 반환")
-            return self._empty_balance()
-
-        today = date.today().strftime("%Y%m%d")
-        body = {"qry_dt": today}
-        data = self._post("/api/dostk/acnt", body, "ka01690")
+        body = {
+            "qry_tp":      "0",    # 0=전체
+            "dmst_stex_tp": "KRX",
+        }
+        data = self._post("/api/dostk/acnt", body, "kt00001")
 
         if not data or data.get("return_code") != 0:
+            log.warning(f"kt00001 조회 실패: {data.get('return_msg') if data else 'None'}")
             return self._empty_balance()
 
-        def _i(v, d=0):
-            """빈 문자열/None 안전 int 변환"""
+        def _f(v, d=0.0):
             try:
-                return int(v) if v not in (None, "", " ") else d
+                s = str(v).replace(",", "").replace("+", "").strip()
+                return float(s) if s not in ("", "None", " ") else d
+            except (ValueError, TypeError):
+                return d
+
+        try:
+            cash = _f(data.get("entr", 0))
+            log.info(f"kt00001 예수금 조회 성공: {cash:,.0f}원")
+            return {
+                "cash":          cash,
+                "total_value":   0,
+                "total_pnl":     0,
+                "total_pnl_pct": 0.0,
+                "num_holdings":  0,
+                "holdings":      [],
+                "source":        "kt00001",
+                "updated_at":    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        except Exception as e:
+            log.error(f"kt00001 파싱 오류: {e}")
+            return self._empty_balance()
+
+    # ════════════════════════════════════════════════════════
+    # ── 계좌평가현황 (kt00004) — 전체 보유종목 + 현금 (수동매수 포함)
+    # ════════════════════════════════════════════════════════
+    def get_portfolio_holdings(self) -> dict:
+        """
+        계좌평가현황요청 (kt00004)
+        POST /api/dostk/acnt  api-id: kt00004
+        공식 문서 기준 필드:
+          - 보유종목 리스트: stk_acnt_evlt_prst
+            stk_cd, stk_nm, rmnd_qty, avg_prc, cur_prc, evlt_amt, pl_amt, pl_rt
+          - 현금(예수금): entr
+        반환: {cash, holdings, total_value, ...} 또는 빈 dict
+        """
+        body = {
+            "qry_tp":      "0",    # 0=전체
+            "dmst_stex_tp": "KRX",
+        }
+        data = self._post("/api/dostk/acnt", body, "kt00004")
+
+        if not data or data.get("return_code") != 0:
+            log.warning(f"kt00004 조회 실패 — return_code: {data.get('return_code') if data else 'None'}, msg: {data.get('return_msg') if data else 'None'}")
+            return {}
+
+        def _i(v, d=0):
+            try:
+                s = str(v).replace(",", "").replace("+", "").strip()
+                return int(float(s)) if s not in ("", "None", " ") else d
             except (ValueError, TypeError):
                 return d
 
         def _f(v, d=0.0):
-            """빈 문자열/None 안전 float 변환"""
             try:
-                return float(v) if v not in (None, "", " ") else d
+                s = str(v).replace(",", "").replace("+", "").strip()
+                return float(s) if s not in ("", "None", " ") else d
             except (ValueError, TypeError):
                 return d
 
         try:
             holdings = []
-            for item in data.get("day_bal_rt", []):
+            # 공식 문서: 리스트 필드명 = stk_acnt_evlt_prst
+            item_list = data.get("stk_acnt_evlt_prst", [])
+            if not item_list:
+                # fallback: 다른 가능한 필드명 시도
+                for key in ("acnt_evlt_remn_indv_tot", "output", "list", "data"):
+                    candidate = data.get(key)
+                    if isinstance(candidate, list) and candidate:
+                        item_list = candidate
+                        log.debug(f"kt00004 fallback 리스트 필드: {key}")
+                        break
+
+            for item in item_list:
                 qty = _i(item.get("rmnd_qty", 0))
                 if qty == 0:
                     continue
-                avg     = _f(item.get("buy_uv", 0))
+                avg     = _f(item.get("avg_prc", 0))
                 cur     = _f(item.get("cur_prc", 0))
-                pnl     = _f(item.get("evlv_prft", item.get("evltv_prft", 0)))
-                pnl_pct = _f(item.get("prft_rt", 0))
+                val     = _f(item.get("evlt_amt", cur * qty))
+                pnl     = _f(item.get("pl_amt", val - avg * qty))
+                pnl_pct = _f(item.get("pl_rt", 0))
                 holdings.append({
                     "code":          item.get("stk_cd", ""),
                     "name":          item.get("stk_nm", ""),
@@ -203,96 +263,24 @@ class KiwoomRestAPI:
                     "current_price": cur,
                     "pnl_pct":       round(pnl_pct, 2),
                     "pnl_amount":    round(pnl),
-                    "eval_amount":   round(_f(item.get("evlt_amt", cur * qty))),
-                })
-
-            total_eval = _f(data.get("tot_evlt_amt", 0))
-            total_pnl  = _f(data.get("tot_evlv_prft", 0))
-            cash       = _f(data.get("dbst_bal", 0))
-            pnl_rt     = _f(data.get("tot_prft_rt", 0))
-
-            return {
-                "cash":          cash,
-                "total_value":   total_eval,
-                "total_pnl":     total_pnl,
-                "total_pnl_pct": round(pnl_rt, 2),
-                "num_holdings":  len(holdings),
-                "holdings":      holdings,
-                "updated_at":    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            }
-        except Exception as e:
-            log.error(f"잔고 파싱 오류: {e}")
-            return self._empty_balance()
-
-    # ════════════════════════════════════════════════════════
-    # ── 계좌평가잔고내역 (ka01002) — 전체 보유종목 (수동매수 포함)
-    # ════════════════════════════════════════════════════════
-    def get_portfolio_holdings(self) -> dict:
-        """
-        계좌평가잔고내역 (ka01002)
-        ka01690 와 달리 수동 매수 종목도 포함
-        반환: {cash, holdings, total_value, ...} 또는 빈 dict
-        """
-        body = {"qry_tp": "1"}   # 1=전체
-        data = self._post("/api/dostk/acnt", body, "ka01002")
-
-        if not data or data.get("return_code") != 0:
-            log.warning(f"ka01002 조회 실패 — return_code: {data.get('return_code') if data else 'None'}")
-            return {}
-
-        def _i(v, d=0):
-            try:
-                return int(v) if v not in (None, "", " ") else d
-            except (ValueError, TypeError):
-                return d
-
-        def _f(v, d=0.0):
-            try:
-                return float(v) if v not in (None, "", " ") else d
-            except (ValueError, TypeError):
-                return d
-
-        try:
-            # ka01002 응답 필드 (Kiwoom 문서 기준 예상 필드명)
-            # 실제 필드명은 API 응답 확인 후 조정 필요
-            holdings = []
-            item_list = (
-                data.get("acnt_evlt_remn_indv_tot", []) or
-                data.get("output", []) or
-                data.get("list", []) or
-                []
-            )
-            for item in item_list:
-                qty = _i(item.get("rmnd_qty") or item.get("hldg_qty") or 0)
-                if qty == 0:
-                    continue
-                avg     = _f(item.get("buy_uv") or item.get("avg_uv") or 0)
-                cur     = _f(item.get("cur_prc") or item.get("prst_pric") or 0)
-                val     = _f(item.get("evlt_amt") or item.get("eval_amt") or cur * qty)
-                pnl     = _f(item.get("evlv_prft") or item.get("prft") or (val - avg * qty))
-                pnl_pct = _f(item.get("prft_rt") or item.get("earn_rt") or 0)
-                holdings.append({
-                    "code":          item.get("stk_cd") or item.get("pdno", ""),
-                    "name":          item.get("stk_nm") or item.get("prdt_name", ""),
-                    "qty":           qty,
-                    "avg_price":     avg,
-                    "current_price": cur,
-                    "pnl_pct":       round(pnl_pct, 2),
-                    "pnl_amount":    round(pnl),
                     "value":         round(val),
                 })
 
-            total_eval = _f(data.get("tot_evlt_amt") or data.get("evlt_remn_tot") or 0)
-            total_pnl  = _f(data.get("tot_evlv_prft") or data.get("tot_prft") or 0)
-            cash       = _f(data.get("dbst_bal") or data.get("dnca_tot_amt") or 0)
-            pnl_rt     = _f(data.get("tot_prft_rt") or 0)
+            # 현금: entr 필드 (공식 문서)
+            cash = _f(data.get("entr", 0))
 
-            if not holdings and total_eval == 0:
-                log.warning("ka01002 응답은 성공이나 보유종목 없음 (필드명 불일치 가능)")
-                log.debug(f"ka01002 raw keys: {list(data.keys())}")
+            # 합계는 API가 제공하면 사용, 없으면 계산
+            total_eval = _f(data.get("tot_evlt_amt", sum(h["value"] for h in holdings)))
+            total_pnl  = _f(data.get("tot_pl_amt", sum(h["pnl_amount"] for h in holdings)))
+            pnl_rt     = _f(data.get("tot_pl_rt", 0))
+
+            if not holdings and cash == 0:
+                log.warning("kt00004 응답 성공이나 보유종목/잔고 없음 — 필드명 확인 필요")
+                log.debug(f"kt00004 raw keys: {list(data.keys())}")
+                log.debug(f"kt00004 raw data: {data}")
                 return {}
 
-            log.info(f"ka01002 계좌잔고 조회 성공: {len(holdings)}종목, 평가총액 {total_eval:,.0f}원")
+            log.info(f"kt00004 계좌잔고 조회 성공: {len(holdings)}종목, 현금 {cash:,.0f}원, 평가총액 {total_eval:,.0f}원")
             return {
                 "cash":          cash,
                 "total_value":   total_eval,
@@ -300,11 +288,11 @@ class KiwoomRestAPI:
                 "total_pnl_pct": round(pnl_rt, 2),
                 "num_holdings":  len(holdings),
                 "holdings":      holdings,
-                "source":        "ka01002",
+                "source":        "kt00004",
                 "updated_at":    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
         except Exception as e:
-            log.error(f"ka01002 파싱 오류: {e}")
+            log.error(f"kt00004 파싱 오류: {e}")
             return {}
 
     def _empty_balance(self) -> dict:
