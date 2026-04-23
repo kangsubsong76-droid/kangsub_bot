@@ -1373,10 +1373,85 @@ class MainEngine:
             )
         elif command == "pause":
             self.auto_trading = False
+            return "⏸ 자동매매 일시정지"
         elif command == "resume":
             self.auto_trading = True
+            return "▶️ 자동매매 재개"
         elif command == "balance":
             return f"현금: {summary['cash']:,.0f}원"
+
+        elif command == "run_now":
+            # 누락된 잡 체인 수동 실행 (백그라운드 스레드)
+            import threading
+            def _chain():
+                self.notifier._send_http(
+                    f"🔄 <b>수동 잡 체인 시작</b> [{datetime.now():%H:%M}]\n"
+                    f"뉴스수집 → 시그널분석 → PAM매수 순서로 실행"
+                )
+                try:
+                    log.info("[run_now] 뉴스 수집")
+                    self.collect_news()
+                    log.info("[run_now] 뉴스 시그널 분석")
+                    self.analyze_news_signals()
+                    log.info("[run_now] 기술적 시그널 업데이트")
+                    self.update_technical_signals()
+                    log.info("[run_now] PAM 매수 실행")
+                    self.execute_buy_signals()
+                    self.notifier._send_http(
+                        f"✅ <b>수동 잡 체인 완료</b> [{datetime.now():%H:%M}]"
+                    )
+                except Exception as e:
+                    log.error(f"[run_now] 오류: {e}")
+                    self.notifier._send_http(f"❌ run_now 오류: {e}")
+            threading.Thread(target=_chain, daemon=True, name="RunNowChain").start()
+            return "🔄 잡 체인 시작 (뉴스→시그널→PAM매수). 텔레그램으로 진행상황 전송됩니다."
+
+        elif command == "buy_now":
+            # 시그널 생성 없이 즉시 PAM 매수만 실행
+            import threading
+            def _buy():
+                self.notifier._send_http(
+                    f"🛒 <b>즉시 PAM 매수 시작</b> [{datetime.now():%H:%M}]"
+                )
+                try:
+                    self.execute_buy_signals()
+                except Exception as e:
+                    log.error(f"[buy_now] 오류: {e}")
+                    self.notifier._send_http(f"❌ buy_now 오류: {e}")
+            threading.Thread(target=_buy, daemon=True, name="BuyNow").start()
+            return "🛒 즉시 매수 실행 중..."
+
+        elif command == "signal":
+            # 현재 시그널 상태 조회
+            import threading
+            def _sig():
+                self.notifier._send_http(f"📡 시그널 조회 중... [{datetime.now():%H:%M}]")
+                try:
+                    sigs = self._generate_signals()
+                    buy  = [s for s in sigs if s.action == "BUY"]
+                    lines = "\n".join(
+                        f"  {s.name} ({s.code}) 점수:{s.weighted_score:.0f}"
+                        for s in buy[:5]
+                    ) or "  없음"
+                    self.notifier._send_http(
+                        f"📡 <b>현재 BUY 시그널</b> [{datetime.now():%H:%M}]\n"
+                        f"총 {len(buy)}종목\n{lines}"
+                    )
+                except Exception as e:
+                    self.notifier._send_http(f"❌ signal 조회 오류: {e}")
+            threading.Thread(target=_sig, daemon=True, name="SignalCheck").start()
+            return "📡 시그널 조회 중..."
+
+        elif command.startswith("set_cash "):
+            # 현금 수동 업데이트: set_cash 15071418
+            try:
+                new_cash = float(command.split()[1].replace(",", ""))
+                self.portfolio.cash = new_cash
+                self.portfolio._save()
+                return f"💰 현금 {new_cash:,.0f}원으로 업데이트"
+            except Exception as e:
+                return f"❌ 형식 오류: set_cash 15071418"
+
         return "OK"
 
     # ── 내부 헬퍼 ──

@@ -329,6 +329,10 @@ class TelegramCommandBot:
         self.app.add_handler(CommandHandler("sync",     self.cmd_sync))
         self.app.add_handler(CommandHandler("help",     self.cmd_help))
         self.app.add_handler(CommandHandler("audit",    self.cmd_audit))
+        self.app.add_handler(CommandHandler("run_now",  self.cmd_run_now))
+        self.app.add_handler(CommandHandler("buy_now",  self.cmd_buy_now))
+        self.app.add_handler(CommandHandler("signal",   self.cmd_signal_check))
+        self.app.add_handler(CommandHandler("set_cash", self.cmd_set_cash))
         return self
 
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -384,19 +388,51 @@ class TelegramCommandBot:
         else:
             await update.message.reply_text("Engine not connected")
 
+    async def cmd_run_now(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """뉴스수집→시그널분석→PAM매수 전체 체인 수동 실행"""
+        if self.engine_callback:
+            result = self.engine_callback("run_now")
+            await update.message.reply_text(result, parse_mode="HTML")
+
+    async def cmd_buy_now(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """즉시 PAM 매수 실행 (시그널 재생성 없이)"""
+        if self.engine_callback:
+            result = self.engine_callback("buy_now")
+            await update.message.reply_text(result, parse_mode="HTML")
+
+    async def cmd_signal_check(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """현재 BUY 시그널 조회"""
+        if self.engine_callback:
+            result = self.engine_callback("signal")
+            await update.message.reply_text(result, parse_mode="HTML")
+
+    async def cmd_set_cash(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """현금 수동 업데이트: /set_cash 15071418"""
+        args = context.args
+        if not args:
+            await update.message.reply_text("사용법: /set_cash 15071418")
+            return
+        if self.engine_callback:
+            result = self.engine_callback(f"set_cash {args[0]}")
+            await update.message.reply_text(result, parse_mode="HTML")
+
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = (
             "📌 <b>KangSub Bot Commands</b>\n"
-            "/status — System status\n"
-            "/balance — Cash balance\n"
-            "/holdings — Current holdings\n"
-            "/signals — Today's signals\n"
-            "/risk — Risk status\n"
-            "/pause — Pause auto-trading\n"
-            "/resume — Resume auto-trading\n"
-            "/sync — Git pull update\n"
-            "/audit — Full system audit\n"
-            "/help — This help message"
+            "/status — 시스템 상태\n"
+            "/balance — 현금 잔고\n"
+            "/holdings — 보유 종목\n"
+            "/signals — 오늘 시그널\n"
+            "/signal — BUY 시그널 즉시 조회\n"
+            "/risk — 리스크 상태\n"
+            "/pause — 자동매매 일시정지\n"
+            "/resume — 자동매매 재개\n"
+            "/run_now — 잡 체인 즉시 실행 (뉴스→시그널→매수)\n"
+            "/buy_now — PAM 매수 즉시 실행\n"
+            "/set_cash 15071418 — 현금 수동 업데이트\n"
+            "/sync — Git pull 업데이트\n"
+            "/audit — 통합 점검\n"
+            "/help — 이 도움말"
         )
         await update.message.reply_text(msg, parse_mode="HTML")
 
