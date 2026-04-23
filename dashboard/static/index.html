@@ -631,7 +631,17 @@ async function loadNXT() {
   const stocks = Array.isArray(cand.stocks) ? cand.stocks : [];
 
   // 태그
-  document.getElementById('n-date').textContent = `${dateFmt(cand.date ?? d.analysis_date)} ${d.analysis_time ?? ''}`;
+  const nxtDate = cand.date ?? d.analysis_date ?? '';
+  const todayStr = new Date().toISOString().slice(0,10);
+  const ndEl = document.getElementById('n-date');
+  ndEl.textContent = `${dateFmt(nxtDate)} ${d.analysis_time ?? ''}`;
+  if (nxtDate && nxtDate !== todayStr) {
+    ndEl.className = 'ntag warn';
+    ndEl.title = `어제(${nxtDate}) 데이터 — 오늘 07:30 분석 미실행`;
+  } else {
+    ndEl.className = 'ntag go';
+    ndEl.title = '오늘 분석 데이터';
+  }
 
   const ms = cand.market_status ?? '--';
   const mtag = document.getElementById('n-mkt');
@@ -858,9 +868,13 @@ async function loadTradingPlan() {
   /* ── NXT 시장 분석 ── */
   const nmEl = document.getElementById('plan-nxt-market');
   if (nmEl) {
-    let txt = nxt.analysis_date && nxt.analysis_date !== '-'
-      ? `분석: ${nxt.analysis_date} ${nxt.analysis_time || ''}`
+    const planDate = nxt.analysis_date && nxt.analysis_date !== '-' ? nxt.analysis_date : '';
+    const isStale  = planDate && planDate !== todayStr;
+    let txt = planDate
+      ? `${isStale ? '⚠️ [구데이터] ' : ''}분석: ${planDate} ${nxt.analysis_time || ''}`
       : '분석 대기중';
+    if (isStale) nmEl.style.color = 'var(--mid)';
+    else         nmEl.style.color = '';
     if (nxt.nasdaq_change != null) txt += ` | 나스닥 ${nxt.nasdaq_change > 0 ? '+' : ''}${Number(nxt.nasdaq_change).toFixed(2)}%`;
     if (nxt.vix != null)           txt += ` | VIX ${nxt.vix}`;
     if (nxt.stop)                  txt += ' | ⛔ 매매중단';
