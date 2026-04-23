@@ -36,7 +36,8 @@ DATA_DIR   = BASE / "data"
 def _read(path, default=None):
     try:
         if Path(path).exists():
-            return json.loads(Path(path).read_text(encoding="utf-8"))
+            # utf-8-sig: BOM(﻿) 자동 제거 — PowerShell WriteAllText 호환
+            return json.loads(Path(path).read_text(encoding="utf-8-sig"))
     except Exception:
         pass
     return default if default is not None else {}
