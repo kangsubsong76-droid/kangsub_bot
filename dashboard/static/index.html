@@ -267,6 +267,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
   <div class="pnl" style="grid-column:1;grid-row:1">
     <div class="pnl-hd">
       <span class="ico">📡</span> NXT 급상승 예측
+      <span id="nxt-stale-icon" title="" style="display:none;margin-left:4px;font-size:14px;cursor:help">⚠️</span>
       <span class="badge" id="nxt-badge" style="background:rgba(58,142,255,.15);color:var(--blue)">로딩중</span>
     </div>
     <div class="pnl-bd">
@@ -429,6 +430,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
       <div style="padding:10px 14px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
           <span style="color:var(--gold);font-weight:700;font-size:12px">⚡ NXT (장전거래)</span>
+          <span id="plan-nxt-stale-icon" title="" style="display:none;font-size:12px;cursor:help">⚠️</span>
           <span style="color:var(--muted);font-size:10px">— 08:00 매수 실행</span>
         </div>
         <div id="plan-nxt-market" style="font-size:10px;color:var(--muted);margin-bottom:7px;padding:4px 7px;background:rgba(255,165,0,0.06);border-radius:4px">NXT 분석 로딩 중...</div>
@@ -635,12 +637,15 @@ async function loadNXT() {
   const todayStr = new Date().toISOString().slice(0,10);
   const ndEl = document.getElementById('n-date');
   ndEl.textContent = `${dateFmt(nxtDate)} ${d.analysis_time ?? ''}`;
+  const staleIcon = document.getElementById('nxt-stale-icon');
   if (nxtDate && nxtDate !== todayStr) {
     ndEl.className = 'ntag warn';
     ndEl.title = `어제(${nxtDate}) 데이터 — 오늘 07:30 분석 미실행`;
+    if (staleIcon) { staleIcon.style.display = 'inline'; staleIcon.title = `구데이터: ${nxtDate} — 오늘 07:30 분석이 실행되지 않았습니다`; }
   } else {
     ndEl.className = 'ntag go';
     ndEl.title = '오늘 분석 데이터';
+    if (staleIcon) staleIcon.style.display = 'none';
   }
 
   const ms = cand.market_status ?? '--';
@@ -871,10 +876,15 @@ async function loadTradingPlan() {
     const planDate = nxt.analysis_date && nxt.analysis_date !== '-' ? nxt.analysis_date : '';
     const isStale  = planDate && planDate !== todayStr;
     let txt = planDate
-      ? `${isStale ? '⚠️ [구데이터] ' : ''}분석: ${planDate} ${nxt.analysis_time || ''}`
+      ? `분석: ${planDate} ${nxt.analysis_time || ''}`
       : '분석 대기중';
     if (isStale) nmEl.style.color = 'var(--mid)';
     else         nmEl.style.color = '';
+    const planStaleIcon = document.getElementById('plan-nxt-stale-icon');
+    if (planStaleIcon) {
+      planStaleIcon.style.display = isStale ? 'inline' : 'none';
+      planStaleIcon.title = isStale ? `구데이터: ${planDate} — 오늘 07:30 분석 미실행` : '';
+    }
     if (nxt.nasdaq_change != null) txt += ` | 나스닥 ${nxt.nasdaq_change > 0 ? '+' : ''}${Number(nxt.nasdaq_change).toFixed(2)}%`;
     if (nxt.vix != null)           txt += ` | VIX ${nxt.vix}`;
     if (nxt.stop)                  txt += ' | ⛔ 매매중단';
