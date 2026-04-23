@@ -91,6 +91,15 @@ class MainEngine:
         self.notion = NotionLogger()
         self.cmd_bot = TelegramCommandBot(engine_callback=self.handle_telegram_command)
 
+        # 봇 상태 저장 (대시보드 실전/페이퍼 표시용)
+        try:
+            import json as _j
+            from config.settings import DATA_DIR as _DD
+            _status = {"paper_trading": paper, "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+            (_DD / "bot_status.json").write_text(_j.dumps(_status, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
         # 캐시
         self._cached_news = []
         self._cached_signals = []

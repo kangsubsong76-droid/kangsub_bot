@@ -177,9 +177,22 @@ def api_status():
     port_data = _read(DATA_STORE / "portfolio.json", {})
     funds     = _read(DATA_DIR / "fundamentals.json", {})
     sigs      = _read(DATA_STORE / "signals.json", [])
+
+    # 실전/페이퍼 여부: bot_status.json → config/settings.py → 기본값 False
+    paper = False
+    try:
+        bot_status = _read(DATA_STORE / "bot_status.json", {})
+        if "paper_trading" in bot_status:
+            paper = bot_status["paper_trading"]
+        else:
+            from config.settings import PAPER_TRADING as _PT
+            paper = _PT
+    except Exception:
+        paper = False
+
     return jsonify({
         "bot_running":    True,
-        "paper_trading":  True,
+        "paper_trading":  paper,
         "last_portfolio": port_data.get("updated_at", "-"),
         "last_signal":    len(sigs),
         "funds_stocks":   len(funds),
