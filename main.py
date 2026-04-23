@@ -1276,21 +1276,29 @@ class MainEngine:
             stocks = surge_collect(top_n=50)
             if not stocks:
                 log.warning("급상승 Top50 데이터 없음 — 소스 응답 실패")
-                asyncio.run(self.notifier.send("⚠️ 급상승 Top50 수집 실패 (ka10027 + pykrx 모두 응답 없음)"))
+                self.notifier._send_http(
+                    f"⚠️ <b>급상승 Top50 수집 실패</b> [{datetime.now():%H:%M}]\n"
+                    f"ka10027(키움) + pykrx 모두 응답 없음\n"
+                    f"→ 오늘 surge_score 미반영"
+                )
                 return
 
             top5 = "\n".join(
                 f"  {s['rank']}. {s['name']} ({s['code']}) {s['change_rate']:+.1f}%"
                 for s in stocks[:5]
             )
-            asyncio.run(self.notifier.send(
+            self.notifier._send_http(
                 f"📈 <b>급상승 Top50 수집 완료</b> [{datetime.now():%H:%M}]\n"
                 f"{top5}\n"
                 f"  … 외 {len(stocks)-5}종목 / DB 누적 저장"
-            ))
+            )
             log.info(f"급상승 Top50 저장 완료 (1위: {stocks[0]['name']} {stocks[0]['change_rate']:+.1f}%)")
         except Exception as e:
             log.error(f"collect_surge_top50 오류: {e}")
+            self.notifier._send_http(
+                f"🚨 <b>급상승 Top50 수집 오류</b> [{datetime.now():%H:%M}]\n"
+                f"{type(e).__name__}: {str(e)[:200]}"
+            )
 
     def update_nxt_result(self):
         """[16:10] NXT 청산 결과 → 패턴DB 업데이트 + 텔레그램 결과 전송"""
