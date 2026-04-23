@@ -1652,8 +1652,36 @@ class MainEngine:
 _dashboard_proc = None  # 전역 참조 (종료 시 정리용)
 
 
+def _kill_existing_dashboard():
+    """기존 dashboard/server.py 프로세스 모두 종료 (중복 실행 방지)"""
+    try:
+        import psutil
+        killed = 0
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                cmdline = " ".join(proc.info.get("cmdline") or [])
+                if "dashboard" in cmdline and "server.py" in cmdline and proc.pid != os.getpid():
+                    proc.kill()
+                    killed += 1
+            except Exception:
+                pass
+        if killed:
+            log.info(f"기존 대시보드 프로세스 {killed}개 종료")
+            time.sleep(2)
+    except ImportError:
+        # psutil 없으면 taskkill 사용
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/FI", "IMAGENAME eq python.exe"],
+                capture_output=True
+            )
+        except Exception:
+            pass
+
+
 def _start_dashboard_proc() -> subprocess.Popen:
-    """대시보드 서버 subprocess 시작"""
+    """대시보드 서버 subprocess 시작 (기존 프로세스 정리 후)"""
+    _kill_existing_dashboard()
     script = Path(__file__).parent / "dashboard" / "server.py"
     return subprocess.Popen(
         [sys.executable, str(script)],
@@ -1665,10 +1693,11 @@ def _start_dashboard_proc() -> subprocess.Popen:
 
 def _dashboard_watchdog():
     """
-    대시보드 프로세스 감시 — 10초 주기로 살아있는지 확인
+    대시보드 프로세스 감시 — 30초 주기로 살아있는지 확인
     죽었으면 자동 재시작. main.py 가 살아있는 한 대시보드도 살아있다.
     """
     global _dashboard_proc
+    time.sleep(5)  # 시작 직후 5초 대기 (KangSubDashboard Task와 충돌 방지)
     while True:
         if _dashboard_proc is None or _dashboard_proc.poll() is not None:
             if _dashboard_proc is not None:
@@ -1678,7 +1707,7 @@ def _dashboard_watchdog():
                 log.info(f"대시보드 서버 기동 (PID: {_dashboard_proc.pid}, 포트 8080)")
             except Exception as e:
                 log.error(f"대시보드 재시작 실패: {e}")
-        time.sleep(10)
+        time.sleep(30)  # 10초 → 30초로 늘려 과도한 체크 방지
 
 
 # ── 진입점 ──
