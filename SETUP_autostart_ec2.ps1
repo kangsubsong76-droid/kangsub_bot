@@ -3,7 +3,6 @@
 # PowerShell 5.1 compatible
 
 $taskName   = "KangSubBot"
-$botScript  = "C:\kangsub_bot\main.py"
 $workingDir = "C:\kangsub_bot"
 $logFile    = "C:\kangsub_bot\logs\autostart.log"
 
@@ -15,17 +14,16 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
     Write-Host "  Removed existing task" -ForegroundColor Yellow
 }
 
-# Find py.exe
+# Find py.exe (full path required for SYSTEM account)
 $pyExe = $null
+$candidates = @(
+    "C:\Windows\py.exe",
+    "C:\Windows\SysWOW64\py.exe",
+    "$env:LOCALAPPDATA\Programs\Python\Launcher\py.exe"
+)
 $pyCmd = Get-Command py -ErrorAction SilentlyContinue
-if ($pyCmd) {
-    $pyExe = $pyCmd.Source
-}
+if ($pyCmd) { $pyExe = $pyCmd.Source }
 if (-not $pyExe) {
-    $candidates = @(
-        "C:\Windows\py.exe",
-        "C:\Windows\SysWOW64\py.exe"
-    )
     foreach ($c in $candidates) {
         if (Test-Path $c) { $pyExe = $c; break }
     }
@@ -39,74 +37,74 @@ Write-Host "  py.exe: $pyExe" -ForegroundColor Green
 # Create logs directory
 New-Item -ItemType Directory -Force -Path "C:\kangsub_bot\logs" | Out-Null
 
-# Create wrapper script (restart loop)
+# ── wrapper script: 재시작 루프 + 크래시 알림 ──────────────────
 $wrapperPath = "C:\kangsub_bot\start_bot.ps1"
-Set-Content -Path $wrapperPath -Encoding UTF8 -Value @'
-# start_bot.ps1 - wrapper for Task Scheduler
-$env:PATH += ";C:\Program Files\Git\bin"
+$wrapperContent = @"
+# start_bot.ps1 - Task Scheduler wrapper (auto-restart loop)
+`$env:PATH += ";C:\Program Files\Git\bin;C:\Windows"
+`$env:PYTHONIOENCODING = "utf-8"
 Set-Location "C:\kangsub_bot"
 
-$logFile = "C:\kangsub_bot\logs\autostart.log"
-$pyExe   = "PYEXE_PLACEHOLDER"
+`$logFile      = "C:\kangsub_bot\logs\autostart.log"
+`$pyExe        = "$pyExe"
+`$restartCount = 0
 
-# 텔레그램 알림 전송 함수 (봇 프로세스 밖에서 동작)
-function Send-TelegramAlert([string]$msg) {
+function Write-Log(`$msg) {
+    `$ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path `$logFile -Value "`$ts  `$msg" -Encoding UTF8
+}
+
+function Send-TelegramCrash(`$exitCode, `$count) {
     try {
-        & $pyExe -c @"
-import sys; sys.path.insert(0,'C:/kangsub_bot')
-from notification.telegram_bot import TelegramNotifier
-TelegramNotifier()._send_http('''$msg''')
-"@
+        `$ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        & "`$pyExe" -c "import sys; sys.path.insert(0,'C:/kangsub_bot'); from notification.telegram_bot import TelegramNotifier; TelegramNotifier()._send_http(f'<b>KangSub Bot 크래시</b>\n종료코드: `$exitCode | 재시작 #`$count\n30초 후 자동 재시작\n시각: `$ts')"
     } catch {}
 }
 
-$ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-Add-Content -Path $logFile -Value "$ts  [WRAPPER] KangSub Bot wrapper started"
+Write-Log "[WRAPPER START] py: `$pyExe"
 
-$restartCount = 0
-while ($true) {
-    & $pyExe "C:\kangsub_bot\main.py"
-    $exit = $LASTEXITCODE
-    $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-
-    if ($exit -eq 0 -or $exit -eq $null) {
-        # 정상 종료 (Ctrl+C 등) — 루프 탈출
-        Add-Content -Path $logFile -Value "$ts  [WRAPPER] Normal exit — stopping"
+while (`$true) {
+    & "`$pyExe" "C:\kangsub_bot\main.py"
+    `$exit = `$LASTEXITCODE
+    if (`$exit -eq 0) {
+        Write-Log "[WRAPPER] Normal exit (code 0) — stopped"
         break
     }
-
-    # 비정상 종료 — 재시작
-    $restartCount++
-    Add-Content -Path $logFile -Value "$ts  [WRAPPER] Crash (exit $exit) restart #$restartCount in 30s"
-    Send-TelegramAlert "🚨 KangSub Bot 크래시 감지`n종료코드: $exit | 재시작 #$restartCount`n30초 후 자동 재시작`n시각: $ts"
+    `$restartCount++
+    Write-Log "[WRAPPER CRASH] exit=`$exit restart=`$restartCount"
+    Send-TelegramCrash `$exit `$restartCount
     Start-Sleep 30
 }
-'@
+"@
+Set-Content -Path $wrapperPath -Value $wrapperContent -Encoding UTF8
+Write-Host "  Wrapper: $wrapperPath" -ForegroundColor Green
 
-# Replace placeholder with actual py.exe path
-(Get-Content $wrapperPath) -replace 'PYEXE_PLACEHOLDER', $pyExe | Set-Content $wrapperPath -Encoding UTF8
-Write-Host "  Wrapper script: $wrapperPath" -ForegroundColor Green
+# ── Task Scheduler 등록 ─────────────────────────────────────
+# powershell.exe 전체 경로 사용 (SYSTEM 계정 PATH 미보장)
+$psExe = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
-# Register Task
 $action = New-ScheduledTaskAction `
-    -Execute "powershell.exe" `
-    -Argument "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$wrapperPath`"" `
+    -Execute $psExe `
+    -Argument "-NonInteractive -ExecutionPolicy Bypass -File `"$wrapperPath`"" `
     -WorkingDirectory $workingDir
 
-$triggerBoot  = New-ScheduledTaskTrigger -AtStartup
-$triggerDaily = New-ScheduledTaskTrigger -Daily -At "05:50"
+$triggerBoot         = New-ScheduledTaskTrigger -AtStartup
+$triggerBoot.Delay   = "PT1M"   # 부팅 후 1분 대기
+$triggerDaily        = New-ScheduledTaskTrigger -Daily -At "05:50"
 
 $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
-    -RestartCount 5 `
-    -RestartInterval (New-TimeSpan -Minutes 5) `
-    -MultipleInstances IgnoreNew `
+    -MultipleInstances  IgnoreNew `
     -StartWhenAvailable `
     -RunOnlyIfNetworkAvailable
 
+# SYSTEM 대신 현재 로그인 사용자로 등록 (환경변수 보장)
+$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+Write-Host "  실행 계정: $currentUser" -ForegroundColor Green
+
 $principal = New-ScheduledTaskPrincipal `
-    -UserId "SYSTEM" `
-    -LogonType ServiceAccount `
+    -UserId   $currentUser `
+    -LogonType Interactive `
     -RunLevel Highest
 
 Register-ScheduledTask `
@@ -119,11 +117,13 @@ Register-ScheduledTask `
 
 Write-Host ""
 Write-Host "=== Done ===" -ForegroundColor Green
-Write-Host "Trigger 1: Auto start 1 min after EC2 boot" -ForegroundColor Cyan
-Write-Host "Trigger 2: Daily at 05:50" -ForegroundColor Cyan
+Write-Host "Account  : $currentUser" -ForegroundColor Cyan
+Write-Host "Trigger 1: EC2 boot + 1min" -ForegroundColor Cyan
+Write-Host "Trigger 2: Daily 05:50" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Check status:" -ForegroundColor Yellow
-Write-Host "  Get-ScheduledTask -TaskName '$taskName' | Select State, LastRunTime" -ForegroundColor White
-Write-Host ""
-Write-Host "Manual start:" -ForegroundColor Yellow
+Write-Host "Start now:" -ForegroundColor Yellow
 Write-Host "  Start-ScheduledTask -TaskName '$taskName'" -ForegroundColor White
+Write-Host ""
+Write-Host "Check:" -ForegroundColor Yellow
+Write-Host "  Get-ScheduledTask -TaskName '$taskName' | Select State" -ForegroundColor White
+Write-Host "  Get-Content C:\kangsub_bot\logs\autostart.log" -ForegroundColor White
