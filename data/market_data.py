@@ -47,6 +47,16 @@ def _krx_code(code: str) -> str:
     return code.zfill(6)
 
 
+def _yf_col(c) -> str:
+    """yfinance MultiIndex 컬럼 이름 평탄화 (중첩 tuple 대응)
+    예: ('Close', '^KS11') → 'close'
+        (('Price', 'Close'), '^KS11') → 'price'  (재귀 unwrap)
+    """
+    while isinstance(c, tuple):
+        c = c[0]
+    return str(c).lower()
+
+
 def _call_with_timeout(fn, timeout=_API_TIMEOUT):
     """함수를 별도 스레드에서 실행, timeout 초 초과 시 None 반환"""
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
@@ -102,7 +112,7 @@ def get_stock_ohlcv(code: str, days: int = 120) -> pd.DataFrame:
         if result is not None and not result.empty:
             df = result.copy()
             # yfinance >= 0.2 는 MultiIndex columns ('Close', 'TICKER') 반환 → 첫 레벨만 사용
-            df.columns = [(c[0] if isinstance(c, tuple) else c).lower() for c in df.columns]
+            df.columns = [_yf_col(c) for c in df.columns]
             return df[["open", "high", "low", "close", "volume"]]
         if result is None:
             log.warning(f"yfinance timeout ({code})")
@@ -154,7 +164,7 @@ def get_kospi_ohlcv(days: int = 120) -> pd.DataFrame:
         )
         if result is not None and not result.empty:
             df = result.copy()
-            df.columns = [(c[0] if isinstance(c, tuple) else c).lower() for c in df.columns]
+            df.columns = [_yf_col(c) for c in df.columns]
             return df[["open", "high", "low", "close", "volume"]]
 
     return pd.DataFrame()
@@ -172,7 +182,7 @@ def get_usdkrw(days: int = 30) -> pd.DataFrame:
         )
         if result is not None and not result.empty:
             df = result.copy()
-            df.columns = [(c[0] if isinstance(c, tuple) else c).lower() for c in df.columns]
+            df.columns = [_yf_col(c) for c in df.columns]
             return df[["close"]]
     return pd.DataFrame()
 
