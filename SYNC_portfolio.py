@@ -20,27 +20,27 @@ STORE.mkdir(parents=True, exist_ok=True)
 MANUAL_PATH = STORE / "portfolio_manual.json"
 
 # ════════════════════════════════════════════════
-# ★ 여기에 키움 앱 기준 현재 보유 현황을 입력하세요 ★
+# ★ 키움 앱 스크린샷 기준값 입력 (수량 불필요)  ★
 # ════════════════════════════════════════════════
 
 # 현금 (키움 앱 > 잔고 > 현금 탭 > 주문가능금액)
 CASH = 15_071_418
 
-# 총 투자 원금 (처음 넣은 돈 기준, 수익 포함X)
+# 총 투자 원금
 TOTAL_CAPITAL = 20_000_000
 
-# 보유종목 목록
-# qty      : 보유 수량 (주)
-# avg_price: 평균매입단가 (원) — 키움 앱 > 잔고 > 일반 탭에서 확인
+# 보유종목 — 평가금액과 수익금만 입력하면 수량/평균단가 자동 역산
+# eval_amount : 키움 앱 평가금액
+# pnl_amount  : 수익금 (+ 이익 / - 손실)
 HOLDINGS = [
     {
-        "code":      "034020",
-        "name":      "두산에너빌리티",
-        "qty":       0,          # ★ 수량 입력 필요
-        "avg_price": 0,          # ★ 평균단가 입력 필요
-        "category":  "general",  # general / dividend / nxt
+        "code":         "034020",
+        "name":         "두산에너빌리티",
+        "eval_amount":  6_476_600,   # 키움 앱 평가금액
+        "pnl_amount":   1_532_848,   # 수익금 (+이면 이익)
+        "category":     "general",
     },
-    # 종목 추가 시 위 형식으로 복사해서 추가
+    # 종목 추가 시 위 형식으로 복사
 ]
 
 # ════════════════════════════════════════════════
@@ -51,53 +51,51 @@ def main():
     print("  {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print("=" * 55)
 
-    # qty=0 인 종목 체크
-    missing = [h["name"] for h in HOLDINGS if h["qty"] == 0 or h["avg_price"] == 0]
-    if missing:
-        print("\n❌ 수량/평균단가가 0인 종목이 있습니다:")
-        for m in missing:
-            print("   - {}".format(m))
-        print("\n   SYNC_portfolio.py 파일의 HOLDINGS 섹션에")
-        print("   qty(수량)와 avg_price(평균단가)를 입력한 뒤 다시 실행하세요.")
-        print("   (키움 앱 > 잔고 > 일반 탭에서 확인)")
-        return
-
-    # 현재가 조회 (Kiwoom ka10001)
-    print("\n[1] 현재가 조회 중 (ka10001)...")
+    # 현재가 조회 (ka10001) → 수량 역산
+    print("\n[1] ka10001 현재가 조회 중...")
     try:
         from core.kiwoom_rest import KiwoomRestAPI
         kiwoom = KiwoomRestAPI()
-        got_prices = True
     except Exception as e:
-        print("   ⚠️  Kiwoom API 연결 실패 ({}) — 평균단가로 대체".format(e))
+        print("   ⚠️  Kiwoom API 연결 실패: {}".format(e))
         kiwoom = None
-        got_prices = False
 
     enriched = []
     total_value = 0
     total_pnl_amount = 0
 
     for h in HOLDINGS:
-        code      = h["code"]
-        name      = h["name"]
-        qty       = int(h["qty"])
-        avg_price = float(h["avg_price"])
-        cur_price = avg_price  # fallback
+        code        = h["code"]
+        name        = h["name"]
+        eval_amount = int(h["eval_amount"])   # 스크린샷 평가금액
+        pnl_amount  = int(h["pnl_amount"])    # 스크린샷 수익금
+        cost_amount = eval_amount - pnl_amount  # 매입원가 총액
 
+        # ka10001 현재가 조회
+        cur_price = 0
         if kiwoom:
             try:
                 info = kiwoom.get_stock_info(code)
                 if info and info.get("price", 0) > 0:
                     cur_price = float(info["price"])
-                    got_prices = True
             except Exception:
                 pass
 
-        value      = round(cur_price * qty)
-        pnl_amount = round((cur_price - avg_price) * qty)
-        pnl_pct    = round((cur_price - avg_price) / avg_price * 100, 2) if avg_price else 0
+        if cur_price > 0:
+            # 현재가 → 수량 역산 (반올림)
+            qty       = round(eval_amount / cur_price)
+            avg_price = round(cost_amount / qty) if qty else 0
+            price_src = "ka10001"
+        else:
+            # 현재가 미조회 — 평가금액 = 현재가로 가정 (단주 수량 역산 불가)
+            cur_price = eval_amount
+            qty       = 1
+            avg_price = cost_amount
+            price_src = "추정(현재가조회실패)"
 
-        total_value      += value
+        pnl_pct = round(pnl_amount / cost_amount * 100, 2) if cost_amount else 0
+
+        total_value      += eval_amount
         total_pnl_amount += pnl_amount
 
         enriched.append({
@@ -106,15 +104,16 @@ def main():
             "qty":           qty,
             "avg_price":     avg_price,
             "current_price": cur_price,
-            "value":         value,
+            "value":         eval_amount,
             "pnl_amount":    pnl_amount,
             "pnl_pct":       pnl_pct,
             "category":      h.get("category", "general"),
         })
 
-        price_src = "API" if got_prices else "평균단가(추정)"
-        print("   {} ({})  {}주 @ {:.0f}원  현재가: {:.0f}원 [{}]  평가: {:,.0f}원  {:+.2f}%".format(
-            name, code, qty, avg_price, cur_price, price_src, value, pnl_pct))
+        print("   {} ({})  {}주  평균단가: {:,.0f}원  현재가: {:,.0f}원 [{}]".format(
+            name, code, qty, avg_price, cur_price, price_src))
+        print("   평가: {:,.0f}원  수익: {:+,.0f}원 ({:+.2f}%)".format(
+            eval_amount, pnl_amount, pnl_pct))
 
     total_pnl_pct = round(total_pnl_amount / total_value * 100, 2) if total_value else 0
 
