@@ -1,9 +1,9 @@
 """
 SYNC_portfolio.py
-─────────────────────────────────────────────────────
-Kiwoom ka01002 → portfolio_manual.json 동기화
-EC2에서 직접 실행:  py C:\kangsub_bot\SYNC_portfolio.py
-─────────────────────────────────────────────────────
+-------------------------------------------------
+Kiwoom ka01002 -> portfolio_manual.json 동기화
+EC2에서 직접 실행:  py C:/kangsub_bot/SYNC_portfolio.py
+-------------------------------------------------
 """
 import sys
 import json
@@ -90,14 +90,18 @@ def main():
         "cash": 15_071_418,
     }
     print("\n[3] 스크린샷 대조")
-    print(f"  현금  — API: {cash:>12,.0f}원  스샷: {SCREENSHOT['cash']:>12,.0f}원  "
-          f"{'✅ 일치' if abs(cash - SCREENSHOT['cash']) < 1000 else f'⚠️ 차이 {cash - SCREENSHOT[\"cash\"]:+,.0f}원'}")
+    cash_diff = cash - SCREENSHOT["cash"]
+    cash_tag = "✅ 일치" if abs(cash_diff) < 1000 else "⚠️ 차이 {:+,.0f}원".format(cash_diff)
+    print("  현금  — API: {:>12,.0f}원  스샷: {:>12,.0f}원  {}".format(
+        cash, SCREENSHOT["cash"], cash_tag))
     for h in holdings:
-        if h["name"].replace(" ", "") in SCREENSHOT:
-            ss = SCREENSHOT[h["name"].replace(" ", "")]
+        name_key = h["name"].replace(" ", "")
+        if name_key in SCREENSHOT:
+            ss = SCREENSHOT[name_key]
             diff = h["value"] - ss["value"]
-            print(f"  {h['name']} — API: {h['value']:>10,.0f}원  스샷: {ss['value']:>10,.0f}원  "
-                  f"{'✅ 일치' if abs(diff) < 1000 else f'⚠️ 차이 {diff:+,.0f}원 (현재가 변동 정상)'}")
+            val_tag = "✅ 일치" if abs(diff) < 1000 else "⚠️ 차이 {:+,.0f}원 (현재가 변동 정상)".format(diff)
+            print("  {} — API: {:>10,.0f}원  스샷: {:>10,.0f}원  {}".format(
+                h["name"], h["value"], ss["value"], val_tag))
 
     # ── portfolio_manual.json 저장 ──
     total_capital = _load_total_capital()
