@@ -7,6 +7,7 @@ KangSub Bot — 메인 실행 파일
   python main.py --paper     # 강제 페이퍼 트레이딩
   python main.py --once      # 1회 시그널 생성 후 종료
 """
+import os
 import sys
 import json
 import asyncio
@@ -1588,19 +1589,43 @@ if __name__ == "__main__":
     log.info("텔레그램 명령 봇 시작 (/help, /status, /balance 등 사용 가능)")
 
     log.info("KangSub Bot 가동 중... (Ctrl+C 로 종료)")
-    try:
-        while engine.running:
-            time.sleep(60)
-    except KeyboardInterrupt:
-        log.info("종료 신호 수신")
-        scheduler.stop()
+
+    # ── 시작 알림 ────────────────────────────────────────────
+    _mode = "페이퍼" if engine.paper else "실전매매"
+    _prev = f"\n이전 프로세스 종료 후 재시작" if _BOT_PID_FILE.exists() else ""
+    engine.notifier._send_http(
+        f"🟢 <b>KangSub Bot 시작</b>\n"
+        f"모드: {_mode} | PID: {os.getpid()}{_prev}\n"
+        f"시각: {datetime.now():%Y-%m-%d %H:%M:%S}"
+    )
+
+    def _shutdown(reason: str, unexpected: bool = False):
+        """공통 종료 처리 + 텔레그램 알림"""
+        emoji = "🚨" if unexpected else "🔴"
+        engine.notifier._send_http(
+            f"{emoji} <b>KangSub Bot {'비정상 종료' if unexpected else '종료'}</b>\n"
+            f"사유: {reason}\n"
+            f"시각: {datetime.now():%Y-%m-%d %H:%M:%S}"
+        )
+        try:
+            scheduler.stop()
+        except Exception:
+            pass
         if _dashboard_proc and _dashboard_proc.poll() is None:
             _dashboard_proc.terminate()
-            log.info("대시보드 서버 종료")
-        # PID 파일 삭제 (정상 종료 시)
         try:
             if _BOT_PID_FILE.exists():
                 _BOT_PID_FILE.unlink()
         except Exception:
             pass
-        log.info("KangSub Bot 종료")
+        log.info(f"KangSub Bot 종료 — {reason}")
+
+    try:
+        while engine.running:
+            time.sleep(60)
+    except KeyboardInterrupt:
+        _shutdown("수동 종료 (Ctrl+C)")
+    except Exception as e:
+        log.error(f"메인 루프 예외: {e}")
+        _shutdown(f"예기치 않은 오류: {e}", unexpected=True)
+        raise

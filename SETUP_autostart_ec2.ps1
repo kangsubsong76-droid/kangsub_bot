@@ -47,20 +47,38 @@ $env:PATH += ";C:\Program Files\Git\bin"
 Set-Location "C:\kangsub_bot"
 
 $logFile = "C:\kangsub_bot\logs\autostart.log"
-$pyExe = "PYEXE_PLACEHOLDER"
+$pyExe   = "PYEXE_PLACEHOLDER"
+
+# 텔레그램 알림 전송 함수 (봇 프로세스 밖에서 동작)
+function Send-TelegramAlert([string]$msg) {
+    try {
+        & $pyExe -c @"
+import sys; sys.path.insert(0,'C:/kangsub_bot')
+from notification.telegram_bot import TelegramNotifier
+TelegramNotifier()._send_http('''$msg''')
+"@
+    } catch {}
+}
 
 $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-Add-Content -Path $logFile -Value "$ts  [START] KangSub Bot starting"
+Add-Content -Path $logFile -Value "$ts  [WRAPPER] KangSub Bot wrapper started"
 
+$restartCount = 0
 while ($true) {
     & $pyExe "C:\kangsub_bot\main.py"
     $exit = $LASTEXITCODE
-    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    if ($exit -eq 0) {
-        Add-Content -Path $logFile -Value "$ts  [EXIT] Normal exit"
+    $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+    if ($exit -eq 0 -or $exit -eq $null) {
+        # 정상 종료 (Ctrl+C 등) — 루프 탈출
+        Add-Content -Path $logFile -Value "$ts  [WRAPPER] Normal exit — stopping"
         break
     }
-    Add-Content -Path $logFile -Value "$ts  [CRASH] Exit code $exit - restarting in 30s"
+
+    # 비정상 종료 — 재시작
+    $restartCount++
+    Add-Content -Path $logFile -Value "$ts  [WRAPPER] Crash (exit $exit) restart #$restartCount in 30s"
+    Send-TelegramAlert "🚨 KangSub Bot 크래시 감지`n종료코드: $exit | 재시작 #$restartCount`n30초 후 자동 재시작`n시각: $ts"
     Start-Sleep 30
 }
 '@
