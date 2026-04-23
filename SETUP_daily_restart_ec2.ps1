@@ -4,59 +4,44 @@
 
 $TASK_NAME   = "KangSubBotDailyRestart"
 $BOT_TASK    = "KangSubBot"
-$RESTART_TIME = "05:48"   # KST 05:48 (봇 재시작, 05:50 메인 트리거보다 2분 앞서 종료)
+$RESTART_TIME = "05:48"
+$ROOT        = "C:\kangsub_bot"
 
 Write-Host "=== KangSubBot 매일 강제 재시작 Task 등록 ===" -ForegroundColor Cyan
 
-# ── 기존 태스크 제거 ──
+# ── Step 1: 재시작용 helper 스크립트 생성 ──
+$helperPath = "$ROOT\scripts\daily_restart.ps1"
+$helperContent = 'Stop-ScheduledTask -TaskName "KangSubBot" -ErrorAction SilentlyContinue' + "`r`n" +
+                 'Start-Sleep -Seconds 15' + "`r`n" +
+                 'Start-ScheduledTask -TaskName "KangSubBot"'
+Set-Content -Path $helperPath -Value $helperContent -Encoding UTF8
+Write-Host "Helper 스크립트 생성: $helperPath" -ForegroundColor Green
+
+# ── Step 2: 기존 태스크 제거 ──
 Unregister-ScheduledTask -TaskName $TASK_NAME -Confirm:$false -ErrorAction SilentlyContinue
 
-# ── 재시작 인라인 스크립트 ──
-$script = @"
-Stop-ScheduledTask -TaskName '$BOT_TASK' -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 15
-Start-ScheduledTask -TaskName '$BOT_TASK'
-"@
+# ── Step 3: 액션 / 트리거 / 세팅 ──
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NonInteractive -WindowStyle Hidden -File `"$helperPath`""
 
-$action = New-ScheduledTaskAction `
-    -Execute "powershell.exe" `
-    -Argument "-NonInteractive -WindowStyle Hidden -Command `"$script`""
-
-# 매일 05:48 실행 (EC2 시간대가 KST로 설정되어 있어야 함)
-# EC2 시간대 확인: Get-TimeZone
-# KST로 변경: Set-TimeZone -Id "Korea Standard Time"
 $trigger = New-ScheduledTaskTrigger -Daily -At $RESTART_TIME
 
-$settings = New-ScheduledTaskSettingsSet `
-    -ExecutionTimeLimit (New-TimeSpan -Hours 0 -Minutes 5) `
-    -StartWhenAvailable `
-    -RunOnlyIfNetworkAvailable
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -StartWhenAvailable -RunOnlyIfNetworkAvailable
 
-# S4U: 로그인 없이 백그라운드 실행
-Register-ScheduledTask `
-    -TaskName  $TASK_NAME `
-    -Action    $action `
-    -Trigger   $trigger `
-    -Settings  $settings `
-    -RunLevel  Highest `
-    -LogonType S4U `
-    -Force
+# ── Step 4: 태스크 등록 ──
+Register-ScheduledTask -TaskName $TASK_NAME -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -LogonType S4U -Force
 
 Write-Host ""
 Write-Host "✅ '$TASK_NAME' 태스크 등록 완료" -ForegroundColor Green
-Write-Host "   - 매일 $RESTART_TIME KST에 KangSubBot 강제 재시작" -ForegroundColor Yellow
-Write-Host "   - 순서: Stop → 15초 대기 → Start (메모리 클린 재시작)" -ForegroundColor Yellow
+Write-Host "   매일 $RESTART_TIME KST  →  Stop → 15초 대기 → Start" -ForegroundColor Yellow
 Write-Host ""
 
-# EC2 타임존 확인
+# ── EC2 타임존 확인 ──
 $tz = (Get-TimeZone).Id
 Write-Host "현재 EC2 TimeZone: $tz" -ForegroundColor Cyan
 if ($tz -ne "Korea Standard Time") {
-    Write-Host "⚠️  EC2 타임존이 KST가 아닙니다!" -ForegroundColor Red
-    Write-Host "   아래 명령으로 변경하세요:" -ForegroundColor Red
+    Write-Host "⚠️  EC2 타임존이 KST가 아닙니다! 아래 명령으로 변경 후 재실행 하세요:" -ForegroundColor Red
     Write-Host "   Set-TimeZone -Id 'Korea Standard Time'" -ForegroundColor White
 }
 
 Write-Host ""
-Write-Host "태스크 목록 확인:" -ForegroundColor Cyan
 Get-ScheduledTask -TaskName "KangSub*" | Select-Object TaskName, State | Format-Table -AutoSize
