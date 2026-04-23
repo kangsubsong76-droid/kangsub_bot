@@ -22,28 +22,45 @@ class TelegramNotifier:
         self.chat_id = chat_id or TELEGRAM_CHAT_ID
         self.bot = Bot(token=self.token) if self.token else None
 
-    async def send(self, message: str, parse_mode: str = "HTML"):
-        if not self.bot or not self.chat_id:
-            log.warning("Telegram not configured")
-            return
+    def _send_http(self, message: str, parse_mode: str = "HTML") -> bool:
+        """
+        requests.post() 직접 호출 — asyncio/event loop 완전 독립.
+        asyncio.run()이 event loop를 매번 생성/파괴하면서
+        python-telegram-bot의 내부 httpx client가 무효화되는 문제 방지.
+        """
         try:
-            await self.bot.send_message(
-                chat_id=self.chat_id, text=message, parse_mode=parse_mode
+            import requests as _req
+            resp = _req.post(
+                f"https://api.telegram.org/bot{self.token}/sendMessage",
+                json={
+                    "chat_id":    self.chat_id,
+                    "text":       message[:4096],
+                    "parse_mode": parse_mode,
+                },
+                timeout=10,
             )
-            log.info(f"Telegram sent: {message[:50]}...")
+            if resp.ok:
+                log.info(f"Telegram sent: {message[:50]}...")
+                return True
+            else:
+                log.error(f"Telegram HTTP 오류: {resp.status_code} {resp.text[:100]}")
+                return False
         except Exception as e:
             log.error(f"Telegram send failed: {e}")
+            return False
+
+    async def send(self, message: str, parse_mode: str = "HTML"):
+        """비동기 전송 — 내부적으로 동기 HTTP 사용 (event loop 독립)"""
+        if not self.token or not self.chat_id:
+            log.warning("Telegram not configured")
+            return
+        self._send_http(message, parse_mode)
 
     def send_sync(self, message: str):
-        """동기 함수에서 호출용"""
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(self.send(message))
-            else:
-                loop.run_until_complete(self.send(message))
-        except RuntimeError:
-            asyncio.run(self.send(message))
+        """동기 함수에서 직접 호출용"""
+        if not self.token or not self.chat_id:
+            return
+        self._send_http(message)
 
     # ═══════════════════════════════════════════════
     # 기본 알림 메서드
