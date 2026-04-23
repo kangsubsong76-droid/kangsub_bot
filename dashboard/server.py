@@ -4,6 +4,12 @@ Flask 기반 API + 정적 파일 서빙
 포트 8080, EC2에서 24시간 운영
 """
 import sys
+import io
+# EC2 콘솔 cp1252 → UTF-8 강제 (한글 UnicodeEncodeError 방지)
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 import json
 from pathlib import Path
 from datetime import datetime
