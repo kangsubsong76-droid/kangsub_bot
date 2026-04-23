@@ -454,10 +454,10 @@ tr:hover td { background: rgba(58,142,255,.05); }
         보유 종목 <span id="hold-cnt" style="color:var(--blue)">0</span>개 · 수익률 순
       </div>
       <table>
-        <colgroup><col><col style="width:38px"><col style="width:68px"><col style="width:68px"><col style="width:52px"></colgroup>
-        <thead><tr><th>종목명</th><th class="r">수량</th><th class="r">평단가</th><th class="r">현재가</th><th class="r">수익률</th></tr></thead>
+        <colgroup><col><col style="width:38px"><col style="width:62px"><col style="width:62px"><col style="width:76px"><col style="width:52px"></colgroup>
+        <thead><tr><th>종목명</th><th class="r">수량</th><th class="r">평단가</th><th class="r">현재가</th><th class="r">평가금액</th><th class="r">수익률</th></tr></thead>
         <tbody id="hold-tbody">
-          <tr><td colspan="5"><div class="empty">보유 종목 없음</div></td></tr>
+          <tr><td colspan="6"><div class="empty">보유 종목 없음</div></td></tr>
         </tbody>
       </table>
       <div style="font-size:10px;color:var(--muted);margin:8px 0 4px">
@@ -693,11 +693,13 @@ async function loadPortfolio() {
   const d = await req('/api/portfolio');
   if (!d) return;
 
-  const total = d.total_value ?? d.total_capital ?? 0;
-  const cash  = d.cash ?? 0;
-  const pnl   = d.total_pnl ?? 0;
-  const pnlP  = d.total_pnl_pct ?? 0;
-  const cashP = total > 0 ? cash / total * 100 : 0;
+  const stockVal    = d.total_value ?? 0;                          // 주식 평가금액
+  const cash        = d.cash ?? 0;                                 // 현금 잔고
+  const total       = stockVal + cash;                             // 총자산 = 주식 + 현금
+  const totalCapital = d.total_capital ?? total;                   // 투자원금 (기준)
+  const pnl         = d.total_pnl ?? 0;
+  const pnlP        = d.total_pnl_pct ?? 0;
+  const cashP       = totalCapital > 0 ? cash / totalCapital * 100 : 0;  // 현금 / 원금
 
   const te = document.getElementById('p-total');
   te.textContent = krw(total); flash(te);
@@ -708,8 +710,8 @@ async function loadPortfolio() {
   ps.textContent = pct(pnlP); colorEl(ps, pnlP);
 
   document.getElementById('p-cash').textContent = krw(cash);
-  document.getElementById('p-cash-sub').textContent = `현금 ${cashP.toFixed(1)}%`;
-  document.getElementById('p-total-sub').textContent = `투자 ${krw(total - cash)}`;
+  document.getElementById('p-cash-sub').textContent = `원금대비 ${cashP.toFixed(1)}%`;
+  document.getElementById('p-total-sub').textContent = `주식 ${krw(stockVal)} | 현금 ${krw(cash)}`;
   if (d.updated_at) document.getElementById('port-upd').textContent = d.updated_at.slice(11,16)+' 업데이트';
 
   const holdings = Array.isArray(d.holdings) ? d.holdings : [];
@@ -721,12 +723,16 @@ async function loadPortfolio() {
     tbody.innerHTML = holdings
       .sort((a,b) => (b.pnl_pct??0) - (a.pnl_pct??0))
       .map(h => {
-        const r = h.pnl_pct ?? 0;
+        const r   = h.pnl_pct ?? 0;
+        const qty = h.quantity ?? h.qty ?? 0;
+        const cur = h.current_price ?? h.current ?? 0;
+        const val = h.value ?? (qty * cur);   // 평가금액: value 필드 or qty*현재가
         return `<tr>
           <td style="font-weight:600">${h.name??h.stock_name??'--'}</td>
-          <td class="r">${num(h.quantity??h.qty)}</td>
+          <td class="r">${num(qty)}</td>
           <td class="r">${num(h.avg_price)}</td>
-          <td class="r">${num(h.current_price??h.current)}</td>
+          <td class="r">${num(cur)}</td>
+          <td class="r">${krw(val)}</td>
           <td class="r ${cc(r)}">${pct(r)}</td>
         </tr>`;
       }).join('');
