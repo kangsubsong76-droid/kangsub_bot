@@ -51,7 +51,12 @@ def strategy():
 
 @app.route("/api/portfolio")
 def api_portfolio():
-    # 1) Kiwoom ka01002 — 계좌평가잔고내역 (수동매수 포함 전체 보유종목)
+    # 1) 수동 동기화 파일 (portfolio_manual.json) — 최우선: 실제 보유 내역 기준
+    manual = _read(DATA_STORE / "portfolio_manual.json", None)
+    if manual and manual.get("cash", 0) > 0:
+        return jsonify(manual)
+
+    # 2) Kiwoom ka01002 — 계좌평가잔고내역 (수동매수 포함 전체 보유종목)
     if _kiwoom:
         try:
             holdings = _kiwoom.get_portfolio_holdings()
@@ -59,11 +64,6 @@ def api_portfolio():
                 return jsonify(holdings)
         except Exception:
             pass
-
-    # 2) 수동 동기화 파일 (portfolio_manual.json) — 자동 현재가 반영
-    manual = _read(DATA_STORE / "portfolio_manual.json", None)
-    if manual and manual.get("total_value", 0) > 0:
-        return jsonify(manual)
 
     # 3) Kiwoom ka01690 — 봇 거래 내역 기반 잔고 (수동매수 미포함)
     if _kiwoom:
@@ -76,7 +76,7 @@ def api_portfolio():
 
     # 4) 로컬 캐시 fallback
     data = _read(DATA_STORE / "portfolio.json", {
-        "total_capital": 30_000_000,
+        "total_capital": 20_000_000,
         "total_value":   0,
         "cash":          0,
         "total_pnl":     0.0,
