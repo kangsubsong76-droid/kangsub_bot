@@ -83,32 +83,41 @@ class TelegramNotifier:
         await self.send(msg)
 
     async def send_stop_loss_alert(self, alert: dict):
-        msg = (
-            f"🚨 <b>손절매 트리거!</b>\n"
-            f"유형: {alert['type']}\n"
-            f"종목: {alert['name']} ({alert['code']})\n"
-        )
-        if alert["type"] == "INDEX_STOP_LOSS":
-            msg += (
-                f"종목 등락: {alert['stock_change']:+.1%}\n"
-                f"코스피: {alert['kospi_change']:+.1%}\n"
-                f"갭: {alert['gap']:+.1%} (한도 -10%p)\n"
-            )
-        elif alert["type"] == "TRAILING_STOP":
-            msg += (
-                f"수익률: {alert['pnl_pct']:+.1%}\n"
-                f"고점: {alert['high_price']:,.0f}원\n"
-                f"현재: {alert['current_price']:,.0f}원\n"
-                f"하락: {alert['drawdown']:.1%} (한도 {alert['threshold']:.0%})\n"
-            )
-        elif alert["type"] == "PORTFOLIO_MAX_LOSS":
-            msg += (
-                f"투자원금: {alert['total_invested']:,.0f}원\n"
-                f"현재평가: {alert['total_value']:,.0f}원\n"
-                f"손실률: {alert['total_pnl']:.1%}\n"
+        alert_type = alert.get('type', '?')
+        name = alert.get('name', '')
+        code = alert.get('code', '')
+
+        # PORTFOLIO_MAX_LOSS는 종목 단위가 아님
+        if alert_type == "PORTFOLIO_MAX_LOSS":
+            msg = (
+                f"🚨 <b>포트폴리오 손실 한도 초과!</b>\n"
+                f"투자원금: {alert.get('total_invested', 0):,.0f}원\n"
+                f"현재평가: {alert.get('total_value', 0):,.0f}원\n"
+                f"손실률: {alert.get('total_pnl', 0):.1%}\n"
                 f"⚠️ <b>전량 매도 실행</b>\n"
+                f"조치: {alert.get('action', '-')}"
             )
-        msg += f"조치: {alert['action']}"
+        else:
+            stock_line = f"종목: {name} ({code})\n" if name or code else ""
+            msg = (
+                f"🚨 <b>손절매 트리거!</b>\n"
+                f"유형: {alert_type}\n"
+                f"{stock_line}"
+            )
+            if alert_type == "INDEX_STOP_LOSS":
+                msg += (
+                    f"종목 등락: {alert.get('stock_change', 0):+.1%}\n"
+                    f"코스피: {alert.get('kospi_change', 0):+.1%}\n"
+                    f"갭: {alert.get('gap', 0):+.1%} (한도 -10%p)\n"
+                )
+            elif alert_type == "TRAILING_STOP":
+                msg += (
+                    f"수익률: {alert.get('pnl_pct', 0):+.1%}\n"
+                    f"고점: {alert.get('high_price', 0):,.0f}원\n"
+                    f"현재: {alert.get('current_price', 0):,.0f}원\n"
+                    f"하락: {alert.get('drawdown', 0):.1%} (한도 {alert.get('threshold', 0):.0%})\n"
+                )
+            msg += f"조치: {alert.get('action', '-')}"
         await self.send(msg)
 
     # ═══════════════════════════════════════════════
