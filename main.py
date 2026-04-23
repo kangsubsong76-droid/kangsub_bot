@@ -326,10 +326,10 @@ class MainEngine:
             alerts = self.risk.run_all_checks(code, stock_change, kospi_change)
 
             for alert in alerts:
-                # 같은 종목 30분 내 중복 알림 방지 (SELL_ALL은 항상 전송)
+                # 같은 종목 30분 내 중복 알림 방지
                 now = datetime.now()
                 last = self._stop_loss_alerted.get(code)
-                if alert["action"] != "SELL_ALL" and last and (now - last).seconds < 1800:
+                if last and (now - last).seconds < 1800:
                     log.debug(f"손절 알림 중복 스킵: {code} (마지막: {last:%H:%M})")
                     continue
                 self._stop_loss_alerted[code] = now
@@ -346,11 +346,6 @@ class MainEngine:
                             "pnl_pct": pnl.get("pnl_pct") if pnl else None,
                         }
                         self.notion.log_trade(trade_data)
-                elif alert["action"] == "SELL_ALL":
-                    results = self.executor.sell_all(dict(self.portfolio.holdings))
-                    asyncio.run(self.notifier.send(
-                        "🚨 <b>포트폴리오 전량 매도 완료</b>\n사유: 전체 손실 한도 -20% 도달"
-                    ))
 
     def save_portfolio_snapshot(self):
         summary = self.portfolio.get_summary()

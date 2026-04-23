@@ -123,32 +123,6 @@ class RiskManager:
             return alert
         return None
 
-    # ── 3단계: 포트폴리오 전체 손실 한도 ──
-    def check_portfolio_max_loss(self) -> Optional[dict]:
-        """전체 포트폴리오 -20% 시 전량 매도"""
-        if self.total_invested == 0:
-            return None
-
-        total_value = sum(p.current_price * p.quantity for p in self.positions.values())
-        total_pnl = (total_value - self.total_invested) / self.total_invested
-
-        if total_pnl <= PORTFOLIO_MAX_LOSS:
-            alert = {
-                "type": "PORTFOLIO_MAX_LOSS",
-                "total_invested": self.total_invested,
-                "total_value": total_value,
-                "total_pnl": total_pnl,
-                "action": "SELL_ALL",
-                "timestamp": datetime.now(),
-            }
-            self.alerts.append(alert)
-            log.critical(
-                f"[포트폴리오 한도] 투자{self.total_invested:,.0f} → "
-                f"평가{total_value:,.0f} 손실{total_pnl:.1%} ★ 전량매도 트리거 ★"
-            )
-            return alert
-        return None
-
     def run_all_checks(self, code: str, stock_change_pct: float = 0, kospi_change_pct: float = 0) -> list[dict]:
         """모든 리스크 체크를 순서대로 실행"""
         results = []
@@ -160,10 +134,6 @@ class RiskManager:
         r2 = self.check_trailing_stop(code)
         if r2:
             results.append(r2)
-
-        r3 = self.check_portfolio_max_loss()
-        if r3:
-            results.append(r3)
 
         return results
 

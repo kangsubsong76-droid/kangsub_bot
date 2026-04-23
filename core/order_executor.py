@@ -187,15 +187,6 @@ class OrderExecutor:
             )
         return OrderResult(code, name, "SELL", 0, 0, 0, "FAILED", [])
 
-    def sell_all(self, holdings: dict, reason: str = "포트폴리오 한도 초과") -> list[OrderResult]:
-        """전량 매도"""
-        log.warning(f"⚠️ 전량 매도 실행: {reason}")
-        results = []
-        for code, holding in holdings.items():
-            result = self.sell(code, holding.name, holding.quantity, holding.current_price, reason)
-            results.append(result)
-        return results
-
     # ── 저수준 주문 실행 ──
 
     def _execute_order(self, code: str, side: str, qty: int, price: float) -> float:

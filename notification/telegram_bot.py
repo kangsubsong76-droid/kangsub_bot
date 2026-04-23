@@ -87,16 +87,8 @@ class TelegramNotifier:
         name = alert.get('name', '')
         code = alert.get('code', '')
 
-        # PORTFOLIO_MAX_LOSS는 종목 단위가 아님
-        if alert_type == "PORTFOLIO_MAX_LOSS":
-            msg = (
-                f"🚨 <b>포트폴리오 손실 한도 초과!</b>\n"
-                f"투자원금: {alert.get('total_invested', 0):,.0f}원\n"
-                f"현재평가: {alert.get('total_value', 0):,.0f}원\n"
-                f"손실률: {alert.get('total_pnl', 0):.1%}\n"
-                f"⚠️ <b>전량 매도 실행</b>\n"
-                f"조치: {alert.get('action', '-')}"
-            )
+        if False:  # PORTFOLIO_MAX_LOSS 전량매도 제거됨
+            pass
         else:
             stock_line = f"종목: {name} ({code})\n" if name or code else ""
             msg = (
