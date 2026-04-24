@@ -47,17 +47,24 @@ def set_kiwoom(instance):
     _kiwoom_instance = instance
 
 def _get_kiwoom():
+    """
+    ka10027은 데이터 조회 API이므로 KIWOOM_MOCK(모의투자) 여부와 무관하게 사용 가능.
+    실계좌/모의투자 모두 토큰 인증만 성공하면 등락률 순위 조회 동작.
+    다만 KIWOOM_APP_KEY/SECRET이 미설정인 경우 인증 실패 → None 반환.
+    """
     global _kiwoom_instance
     if _kiwoom_instance is not None:
         return _kiwoom_instance
     try:
-        from config.settings import KIWOOM_MOCK
-        if KIWOOM_MOCK:
+        from config.settings import KIWOOM_APP_KEY, KIWOOM_SECRET_KEY
+        if not KIWOOM_APP_KEY or not KIWOOM_SECRET_KEY:
+            log.debug("KIWOOM_APP_KEY/SECRET 미설정 — ka10027 스킵")
             return None
         from core.kiwoom_rest import KiwoomRestAPI
         _kiwoom_instance = KiwoomRestAPI()
         return _kiwoom_instance
-    except Exception:
+    except Exception as e:
+        log.debug(f"Kiwoom 초기화 실패: {e}")
         return None
 
 
