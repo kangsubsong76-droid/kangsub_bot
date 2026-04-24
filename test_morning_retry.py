@@ -75,10 +75,10 @@ except Exception as e:
 # ══════════════════════════════════════════════════════════════
 sep("TEST 2: 기술적 시그널 생성 (signals.json)")
 try:
-    from core.signal_engine import generate_signals
+    from signals.signal_engine import SignalEngine
     from config.universe import get_unique_codes
-    from market.data_fetcher import get_kospi_ohlcv, get_usdkrw, get_vkospi, get_stock_ohlcv
-    from market.market_analyzer import analyze_market
+    from data.market_data import get_kospi_ohlcv, get_usdkrw, get_vkospi, get_stock_ohlcv
+    from signals.market_condition import analyze_market
     import json
 
     DATA_DIR = BASE_DIR / "data"
@@ -97,7 +97,21 @@ try:
         codes = get_unique_codes()
         print(f"종목 수: {len(codes)}개 — OHLCV 조회 중...")
 
-        signals = generate_signals(market, codes)
+        from signals.technical import analyze as tech_analyze
+        from config.universe import get_stock_name
+        engine = SignalEngine()
+        signals = []
+        for code in codes:
+            try:
+                ohlcv = get_stock_ohlcv(code, 120)
+                if len(ohlcv) < 30:
+                    continue
+                ts = tech_analyze(ohlcv, code, get_stock_name(code))
+                sig = engine.generate_signal(ts, market)
+                signals.append(sig)
+            except Exception as e2:
+                print(f"  ⚠️ {code} 스킵: {e2}")
+
         buy_sigs = [s for s in signals if s.action == "BUY"]
 
         path = DATA_DIR / "signals.json"
