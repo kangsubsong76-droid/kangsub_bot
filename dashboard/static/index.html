@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KANGSUB BOT — HTS 대시보드</title>
+<title>APEX — Automated Portfolio EXecution</title>
 <style>
 /* ── 리셋 & 변수 ─────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -333,8 +333,8 @@ tr:hover td { background: rgba(58,142,255,.05); }
   <div class="hdr-brand">
     <div class="dot"></div>
     <div>
-      <div class="brand-name">KANGSUB BOT</div>
-      <div class="brand-sub" id="bot-mode">HTS v2.0</div>
+      <div class="brand-name">APEX</div>
+      <div class="brand-sub" id="bot-mode">LIVE MODE v2.0</div>
     </div>
     <div class="live-badge">⬤ LIVE</div>
   </div>
@@ -786,6 +786,7 @@ async function loadStatus() {
   botEl.className = d.bot_running ? 'mi-val pos' : 'mi-val neg';
   document.getElementById('hk-mode').textContent = d.paper_trading ? '페이퍼' : '실전';
   document.getElementById('bot-mode').textContent = d.paper_trading ? 'PAPER MODE' : 'LIVE MODE v2.0';
+  document.title = d.paper_trading ? 'APEX — PAPER MODE' : 'APEX — Automated Portfolio EXecution';
   document.getElementById('sys-info').textContent =
     `펀더멘털 ${d.funds_stocks ?? '--'}종목 · 시그널 ${d.last_signal ?? '--'}건`;
 }
