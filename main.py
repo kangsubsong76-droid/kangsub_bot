@@ -152,6 +152,33 @@ class MainEngine:
                 "summary": news.summary,
                 "url": news.url,
             })
+        # ── 뉴스 서머리 파일 저장 (대시보드 표시용) ──────────────
+        try:
+            news_items = []
+            for n in self._cached_news[:25]:
+                news_items.append({
+                    "title":     n.title,
+                    "source":    n.source,
+                    "url":       n.url,
+                    "sentiment": round(float(n.sentiment), 2),
+                    "published": n.published,
+                    "sectors":   n.sectors or [],
+                })
+            pos = sum(1 for n in self._cached_news if n.sentiment > 0.1)
+            neg = sum(1 for n in self._cached_news if n.sentiment < -0.1)
+            (DATA_DIR / "news_summary.json").write_text(
+                json.dumps({
+                    "updated":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "total":    len(self._cached_news),
+                    "positive": pos,
+                    "negative": neg,
+                    "neutral":  len(self._cached_news) - pos - neg,
+                    "items":    news_items,
+                }, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            log.warning(f"news_summary.json 저장 실패: {e}")
 
     def analyze_news_signals(self):
         log.info("[08:00] 뉴스 시그널 분석")
@@ -692,6 +719,8 @@ class MainEngine:
         path = DATA_DIR / "signals.json"
         path.write_text(json.dumps([
             {"code": s.code, "name": s.name, "action": s.action,
+             "close_price": s.close_price,
+             "rsi": s.rsi,
              "technical_score": s.technical_score, "market_score": s.market_score,
              "news_score": s.news_score, "weighted_score": s.weighted_score,
              "reasons": s.reasons}
@@ -1631,11 +1660,13 @@ class MainEngine:
 
         log.info(f"[signal] 종목 OHLCV 조회 시작: {len(codes)}종목")
         tech_signals = []
+        close_prices = {}   # code → 최근 종가 (signals.json 표시용)
         for i, code in enumerate(codes, 1):
             ohlcv = get_stock_ohlcv(code, 120)
             if len(ohlcv) < 30:
                 log.debug(f"[signal] {code} 데이터 부족({len(ohlcv)}행) — 스킵")
                 continue
+            close_prices[code] = float(ohlcv["close"].iloc[-1])
             ts = tech_analyze(ohlcv, code, get_stock_name(code))
             funda = get_fundamentals(code)
             if funda:
@@ -1658,6 +1689,9 @@ class MainEngine:
 
         log.info(f"[signal] 시그널 생성: {len(tech_signals)}종목 분석 완료")
         signals = self.signal_engine.generate_batch_signals(tech_signals, market, news_scores)
+        # 종가 & RSI 주입 (signals.json 표시용)
+        for s in signals:
+            s.close_price = close_prices.get(s.code, 0.0)
         buy_count = sum(1 for s in signals if s.action == "BUY")
         log.info(f"[signal] 결과 — BUY:{buy_count} / 전체:{len(signals)}")
         return signals

@@ -20,6 +20,8 @@ class CompositeSignal:
     news_score: float
     weighted_score: float
     reasons: list[str]
+    close_price: float = 0.0   # 최근 종가
+    rsi: float = 0.0           # RSI (표시용)
     timestamp: datetime = None
 
     def __post_init__(self):
@@ -120,6 +122,7 @@ class SignalEngine:
             news_score=news_score,
             weighted_score=round(weighted, 1),
             reasons=reasons,
+            rsi=round(tech.rsi, 1) if tech.rsi else 0.0,
         )
 
     def generate_batch_signals(

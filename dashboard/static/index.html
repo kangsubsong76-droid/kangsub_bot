@@ -116,7 +116,7 @@ html, body {
   position: fixed; top: var(--hdr); left: 0; right: 0; bottom: 0;
   display: grid;
   grid-template-columns: 320px 1fr 295px;
-  grid-template-rows: 1fr 138px 210px;
+  grid-template-rows: 1fr 178px 210px;
   gap: 4px; padding: 4px; background: #04080f;
 }
 
@@ -272,6 +272,35 @@ tr:hover td { background: rgba(58,142,255,.05); }
 .arow-mkt  { font-size: 9px; color: var(--muted); padding: 1px 4px; border: 1px solid var(--border); border-radius: 2px; flex-shrink: 0; }
 .arow-chg  { font-size: 11px; font-weight: 700; min-width: 48px; text-align: right; flex-shrink: 0; }
 .arow-vol  { font-size: 10px; color: var(--blue); min-width: 36px; text-align: right; flex-shrink: 0; }
+
+/* ── 뉴스 & 글로벌 패널 ─────────────────────────────── */
+.gcard {
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 3px;
+  padding: 5px 7px; display: flex; flex-direction: column; gap: 1px;
+}
+.gcard .gn { font-size: 9px; color: var(--muted); letter-spacing: .3px; }
+.gcard .gp { font-size: 12px; font-weight: 700; }
+.gcard .gc { font-size: 10px; }
+
+.sent-bar {
+  height: 5px; border-radius: 3px; background: var(--border);
+  display: flex; overflow: hidden;
+}
+.sent-pos { background: var(--up); transition: width .5s; }
+.sent-neg { background: var(--down); transition: width .5s; }
+.sent-neu { background: var(--muted); flex: 1; }
+
+.news-item {
+  display: flex; gap: 5px; align-items: flex-start;
+  padding: 3px 0; border-bottom: 1px solid rgba(27,42,66,.5);
+}
+.news-mark { font-size: 10px; flex-shrink: 0; padding-top: 1px; }
+.news-title {
+  font-size: 10px; color: var(--text); text-decoration: none; line-height: 1.4;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.news-title:hover { color: var(--blue); }
+.news-src { font-size: 9px; color: var(--muted); flex-shrink: 0; padding-top: 1px; }
 
 /* ── 하단 매매 계획+결과 ────────────────────────────── */
 .bottom-grid {
@@ -464,8 +493,8 @@ tr:hover td { background: rgba(58,142,255,.05); }
         오늘의 시그널 <span id="sig-cnt" style="color:var(--blue)">0</span>건
       </div>
       <table>
-        <colgroup><col><col style="width:52px"></colgroup>
-        <thead><tr><th>종목 / 시그널 근거</th><th class="r">점수</th></tr></thead>
+        <colgroup><col><col style="width:60px"><col style="width:36px"><col style="width:42px"></colgroup>
+        <thead><tr><th>종목 / 시그널 근거</th><th class="r">현재가</th><th class="r">RSI</th><th class="r">점수</th></tr></thead>
         <tbody id="sig-tbody">
           <tr><td colspan="3"><div class="empty">시그널 없음</div></td></tr>
         </tbody>
@@ -510,15 +539,52 @@ tr:hover td { background: rgba(58,142,255,.05); }
     </div>
   </div>
 
-  <!-- ④ 거시지표 (col1 row2) -->
+  <!-- ④ 글로벌 시장 + 뉴스 (col1 row2) -->
   <div class="pnl" style="grid-column:1;grid-row:2">
-    <div class="pnl-hd"><span class="ico">🌍</span> 거시 지표</div>
-    <div class="pnl-bd" style="padding:7px 10px">
-      <div class="mgrid">
-        <div class="mcard"><span class="mn">나스닥</span><div><div class="mp" id="m-nas">--</div><div class="mc" id="m-nas-c">--</div></div></div>
-        <div class="mcard"><span class="mn">S&amp;P500</span><div><div class="mp" id="m-sp">--</div><div class="mc" id="m-sp-c">--</div></div></div>
-        <div class="mcard"><span class="mn">USD/KRW</span><div><div class="mp" id="m-usd">--</div><div class="mc" id="m-usd-c">--</div></div></div>
-        <div class="mcard"><span class="mn">KOSPI</span><div><div class="mp" id="m-ksp">--</div><div class="mc" id="m-ksp-c">--</div></div></div>
+    <div class="pnl-hd">
+      <span class="ico">🌍</span> 글로벌 시장 &amp; 뉴스
+      <span style="margin-left:auto;font-size:10px;color:var(--muted)" id="news-upd">--</span>
+    </div>
+    <div class="pnl-bd" style="padding:6px 10px;display:flex;flex-direction:column;gap:5px;min-height:0">
+      <!-- 글로벌 4개 지표 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;flex-shrink:0">
+        <div class="gcard">
+          <span class="gn">VIX 공포지수</span>
+          <span class="gp" id="m-vix">--</span>
+          <span class="gc" id="m-vix-c">--</span>
+        </div>
+        <div class="gcard">
+          <span class="gn">WTI 유가</span>
+          <span class="gp" id="m-wti">--</span>
+          <span class="gc" id="m-wti-c">--</span>
+        </div>
+        <div class="gcard">
+          <span class="gn">금 Gold</span>
+          <span class="gp" id="m-gold">--</span>
+          <span class="gc" id="m-gold-c">--</span>
+        </div>
+        <div class="gcard">
+          <span class="gn">미국채 10Y</span>
+          <span class="gp" id="m-us10y">--</span>
+          <span class="gc" id="m-us10y-c">--</span>
+        </div>
+      </div>
+      <!-- 뉴스 감성 바 -->
+      <div style="flex-shrink:0">
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-bottom:3px">
+          <span id="news-pos-pct">긍정 --</span>
+          <span id="news-total-txt">뉴스 0건</span>
+          <span id="news-neg-pct">부정 --</span>
+        </div>
+        <div class="sent-bar">
+          <div class="sent-pos" id="news-pos-fill" style="width:0%"></div>
+          <div class="sent-neu"></div>
+          <div class="sent-neg" id="news-neg-fill" style="width:0%"></div>
+        </div>
+      </div>
+      <!-- 뉴스 헤드라인 -->
+      <div id="news-feed" style="flex:1;overflow-y:auto;min-height:0">
+        <div class="empty" style="font-size:10px">뉴스 로딩 중...</div>
       </div>
     </div>
   </div>
@@ -682,10 +748,32 @@ async function loadMarket() {
   setMi('hk-kosdaq', 'hk-kosdaq-c', d.kosdaq);
   setMi('hk-usd',    'hk-usd-c',    d.usdkrw);
   setMi('hk-sp',     'hk-sp-c',     d.sp500);
-  setMi('m-nas',  'm-nas-c',  d.sp500);
-  setMi('m-sp',   'm-sp-c',   d.sp500);
-  setMi('m-usd',  'm-usd-c',  d.usdkrw);
-  setMi('m-ksp',  'm-ksp-c',  d.kospi);
+
+  // 글로벌 지표 패널 업데이트
+  if (d.vix) {
+    const ve = document.getElementById('m-vix');
+    const vc = document.getElementById('m-vix-c');
+    if (ve) ve.textContent = d.vix.price != null ? Number(d.vix.price).toFixed(2) : '--';
+    if (vc) { vc.textContent = d.vix.change_pct != null ? pct(d.vix.change_pct) : '--'; colorEl(vc, d.vix.change_pct); }
+  }
+  if (d.wti) {
+    const we = document.getElementById('m-wti');
+    const wc = document.getElementById('m-wti-c');
+    if (we) we.textContent = d.wti.price != null ? '$' + Number(d.wti.price).toFixed(1) : '--';
+    if (wc) { wc.textContent = d.wti.change_pct != null ? pct(d.wti.change_pct) : '--'; colorEl(wc, d.wti.change_pct); }
+  }
+  if (d.gold) {
+    const ge = document.getElementById('m-gold');
+    const gc = document.getElementById('m-gold-c');
+    if (ge) ge.textContent = d.gold.price != null ? '$' + W.format(Math.round(d.gold.price)) : '--';
+    if (gc) { gc.textContent = d.gold.change_pct != null ? pct(d.gold.change_pct) : '--'; colorEl(gc, d.gold.change_pct); }
+  }
+  if (d.us10y) {
+    const ue = document.getElementById('m-us10y');
+    const uc = document.getElementById('m-us10y-c');
+    if (ue) ue.textContent = d.us10y.price != null ? Number(d.us10y.price).toFixed(2) + '%' : '--';
+    if (uc) { uc.textContent = d.us10y.change_pct != null ? pct(d.us10y.change_pct) : '--'; colorEl(uc, d.us10y.change_pct); }
+  }
 }
 
 /* ── 포트폴리오 ────────────────────────────────────── */
@@ -750,24 +838,34 @@ async function loadSignals() {
     return;
   }
   tbody.innerHTML = sigs.slice(0, 6).map(s => {
-    const reasons = Array.isArray(s.reasons) ? s.reasons : (s.reasons ? [s.reasons] : []);
-    const score   = s.weighted_score ?? s.score;
-    const ts      = s.technical_score != null ? Number(s.technical_score).toFixed(0) : null;
-    const ns      = s.news_score != null ? Number(s.news_score).toFixed(0) : null;
-    const action  = s.action ?? '';
-    const acColor = action==='BUY' ? 'var(--up)' : action==='SELL' ? 'var(--down)' : action==='WATCH' ? 'var(--gold)' : 'var(--muted)';
+    const reasons    = Array.isArray(s.reasons) ? s.reasons : (s.reasons ? [s.reasons] : []);
+    const score      = s.weighted_score ?? s.score;
+    const ts         = s.technical_score != null ? Number(s.technical_score).toFixed(0) : null;
+    const ns         = s.news_score != null ? Number(s.news_score).toFixed(0) : null;
+    const action     = s.action ?? '';
+    const closePrice = s.close_price ?? s.close ?? null;
+    const rsi        = s.rsi ?? null;
+    const acColor    = action==='BUY' ? 'var(--up)' : action==='SELL' ? 'var(--down)' : action==='WATCH' ? 'var(--gold)' : 'var(--muted)';
     // reasons[0] = 액션 레이블, reasons[1..] = 세부 근거
-    const mainLabel = reasons[0] ?? action;
-    const details   = reasons.slice(1, 4); // 최대 3개 세부 근거
+    const mainLabel  = reasons[0] ?? action;
+    const details    = reasons.slice(1, 4); // 최대 3개 세부 근거
     const detailHtml = details.length
       ? `<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:3px">${
           details.map(r => `<span style="font-size:10px;padding:1px 5px;border-radius:2px;background:rgba(58,142,255,.08);border:1px solid rgba(58,142,255,.2);color:var(--muted);white-space:nowrap">${r}</span>`).join('')
         }</div>` : '';
+    // RSI 색상: 과매도(<30)=초록, 과매수(>70)=빨강, 중립=회색
+    const rsiColor   = rsi == null ? 'var(--muted)' : rsi < 30 ? 'var(--up)' : rsi > 70 ? 'var(--down)' : 'var(--text)';
     return `<tr>
       <td style="white-space:normal;padding:5px 5px 6px">
         <div style="font-weight:700;font-size:12px">${s.name??s.code??'--'}</div>
         <div style="font-size:11px;color:${acColor};margin-top:2px">${mainLabel}</div>
         ${detailHtml}
+      </td>
+      <td class="r" style="white-space:nowrap;vertical-align:top;padding-top:7px;font-size:11px">
+        ${closePrice != null ? W.format(Math.round(closePrice)) : '--'}
+      </td>
+      <td class="r" style="white-space:nowrap;vertical-align:top;padding-top:7px;font-size:11px;color:${rsiColor};font-weight:700">
+        ${rsi != null ? Number(rsi).toFixed(1) : '--'}
       </td>
       <td class="r ${cc(score??0)}" style="white-space:nowrap;vertical-align:top;padding-top:7px">
         <div style="font-size:13px;font-weight:700">${score!=null ? Number(score).toFixed(0) : '--'}</div>
@@ -1191,13 +1289,60 @@ async function loadDayPlan() {
   renderTrades(pamTrades, 'pam-result-list', 'pam-result-pnl');
 }
 
+/* ── 뉴스 ──────────────────────────────────────────── */
+async function loadNews() {
+  const d = await req('/api/news');
+  if (!d || !d.total) return;
+
+  // 업데이트 시간
+  const updEl = document.getElementById('news-upd');
+  if (updEl && d.updated) updEl.textContent = d.updated.slice(11, 16) + ' 업데이트';
+
+  // 감성 분포 바
+  const total = d.total || 1;
+  const posW  = Math.round((d.positive || 0) / total * 100);
+  const negW  = Math.round((d.negative || 0) / total * 100);
+
+  const ppEl = document.getElementById('news-pos-pct');
+  const npEl = document.getElementById('news-neg-pct');
+  const ttEl = document.getElementById('news-total-txt');
+  const pfEl = document.getElementById('news-pos-fill');
+  const nfEl = document.getElementById('news-neg-fill');
+
+  if (ppEl) ppEl.textContent = `긍정 ${posW}%`;
+  if (npEl) npEl.textContent = `부정 ${negW}%`;
+  if (ttEl) ttEl.textContent = `${d.total}건`;
+  if (pfEl) pfEl.style.width = posW + '%';
+  if (nfEl) nfEl.style.width = negW + '%';
+
+  // 헤드라인 목록
+  const feed = document.getElementById('news-feed');
+  if (!feed) return;
+  const items = Array.isArray(d.items) ? d.items : [];
+  if (!items.length) {
+    feed.innerHTML = '<div class="empty" style="font-size:10px">뉴스 없음</div>';
+    return;
+  }
+  feed.innerHTML = items.slice(0, 10).map(n => {
+    const s = n.sentiment ?? 0;
+    const sColor = s > 0.1 ? 'var(--up)' : s < -0.1 ? 'var(--down)' : 'var(--muted)';
+    const sMark  = s > 0.1 ? '▲' : s < -0.1 ? '▼' : '─';
+    const src    = n.source ? `<span class="news-src">[${escHtml(n.source)}]</span>` : '';
+    return `<div class="news-item">
+      <span class="news-mark" style="color:${sColor}">${sMark}</span>
+      <a class="news-title" href="${n.url || '#'}" target="_blank">${escHtml(n.title || '')}</a>
+      ${src}
+    </div>`;
+  }).join('');
+}
+
 /* ── 메인 로드 ─────────────────────────────────────── */
 async function loadAll() {
   setRef(true);
   await Promise.allSettled([
     loadMarket(), loadPortfolio(), loadSignals(),
     loadNXT(), loadAfterHours(), loadStatus(), loadScheduler(),
-    loadBotLog(), loadDayPlan(),
+    loadBotLog(), loadDayPlan(), loadNews(),
   ]);
   setRef(false);
 }
@@ -1207,6 +1352,7 @@ setInterval(loadMarket,     5000);   // 시장 5초
 setInterval(loadBotLog,     8000);   // 봇 로그 8초
 setInterval(loadScheduler,  15000);  // 스케줄러 15초
 setInterval(rotateTicker,   4000);   // 헤더 ticker 4초
+setInterval(loadNews,       60000);  // 뉴스 1분
 setInterval(loadAll,        30000);  // 전체 30초
 </script>
 </body>

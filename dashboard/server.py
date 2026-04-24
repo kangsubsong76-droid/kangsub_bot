@@ -163,6 +163,11 @@ def api_market():
             "kosdaq": "^KQ11",
             "usdkrw": "USDKRW=X",
             "sp500":  "^GSPC",
+            # 헤더에 없는 추가 지표
+            "vix":    "^VIX",       # 공포지수
+            "wti":    "CL=F",       # WTI 유가
+            "gold":   "GC=F",       # 금 시세
+            "us10y":  "^TNX",       # 미국 10년 국채금리
         }
         out = {}
         for key, sym in tickers.items():
@@ -177,6 +182,12 @@ def api_market():
         return jsonify(out)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/news")
+def api_news():
+    """뉴스 서머리 — news_summary.json (07:00 뉴스 크롤링 후 저장)"""
+    return jsonify(_read(DATA_DIR / "news_summary.json", {}))
 
 
 @app.route("/api/status")
