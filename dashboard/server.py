@@ -96,12 +96,12 @@ def api_portfolio():
 
 @app.route("/api/signals")
 def api_signals():
-    return jsonify(_read(DATA_STORE / "signals.json", []))
+    return jsonify(_read(DATA_DIR / "signals.json", []))
 
 
 @app.route("/api/trades")
 def api_trades():
-    trades = _read(DATA_STORE / "trades.json", [])
+    trades = _read(DATA_DIR / "trades.json", [])
     today = datetime.now().strftime("%Y-%m-%d")
     today_trades = [t for t in trades if str(t.get("timestamp","")).startswith(today)]
     return jsonify({
@@ -183,7 +183,7 @@ def api_market():
 def api_status():
     port_data = _read(DATA_STORE / "portfolio.json", {})
     funds     = _read(DATA_DIR / "fundamentals.json", {})
-    sigs      = _read(DATA_STORE / "signals.json", [])
+    sigs      = _read(DATA_DIR / "signals.json", [])
 
     # 실전/페이퍼 여부: bot_status.json → 기본값 False (실전)
     bot_status = _read(DATA_STORE / "bot_status.json", {})
@@ -203,9 +203,9 @@ def api_status():
 @app.route("/api/nxt")
 def api_nxt():
     """NXT 급상승 예측 — 후보종목 + 패턴DB 요약"""
-    candidates = _read(DATA_STORE / "nxt_candidates.json", {})
-    prediction = _read(DATA_STORE / "prediction_result.json", {})
-    pattern    = _read(DATA_STORE / "pattern_db.json", {})
+    candidates = _read(DATA_DIR / "nxt_candidates.json", {})
+    prediction = _read(DATA_DIR / "prediction_result.json", {})
+    pattern    = _read(DATA_STORE / "pattern_db.json", {})   # main.py → data/store/
 
     daily = pattern.get("daily_results", [])
     recent_7 = daily[-7:] if daily else []
@@ -226,7 +226,7 @@ def api_nxt():
 @app.route("/api/scheduler")
 def api_scheduler():
     """스케줄러 실행 현황 — scheduler_status.json 기반 동적 응답"""
-    status = _read(DATA_STORE / "scheduler_status.json", {})
+    status = _read(DATA_DIR / "scheduler_status.json", {})
 
     # 함수명 → 표시명 + 예정 시각 매핑 (jobs.py 기준)
     JOB_META = [
@@ -282,7 +282,7 @@ def api_scheduler():
 @app.route("/api/afterhours")
 def api_afterhours():
     """시간외 단일가 수집 결과"""
-    data = _read(DATA_STORE / "afterhours_result.json", {})
+    data = _read(DATA_DIR / "afterhours_result.json", {})
     return jsonify(data)
 
 
@@ -290,8 +290,8 @@ def api_afterhours():
 def api_trading_plan():
     """오늘의 매매 계획 — PAM(정규장) + NXT(장전거래) 통합"""
     manual   = _read(DATA_STORE / "portfolio_manual.json", {})
-    signals  = _read(DATA_STORE / "signals.json", [])
-    nxt_data = _read(DATA_STORE / "nxt_candidates.json", {})
+    signals  = _read(DATA_DIR / "signals.json", [])
+    nxt_data = _read(DATA_DIR / "nxt_candidates.json", {})
 
     cash          = manual.get("cash", 0)
     total_capital = manual.get("total_capital", 10_000_000)
@@ -386,7 +386,7 @@ def api_bot_log():
         "check_global_market":       ("🌍", "글로벌 시장 체크 완료"),
         "collect_surge_top50":       ("🚀", "급상승 Top50 수집 완료"),
     }
-    status = _read(DATA_STORE / "scheduler_status.json", {})
+    status = _read(DATA_DIR / "scheduler_status.json", {})
     for fn_name, (icon, label) in JOB_NAMES.items():
         s = status.get(fn_name, {})
         last = s.get("last_run", "")
@@ -404,7 +404,7 @@ def api_bot_log():
         })
 
     # 3) 오늘 체결 내역
-    trades = _read(DATA_STORE / "trades.json", [])
+    trades = _read(DATA_DIR / "trades.json", [])
     for t in trades:
         ts = str(t.get("timestamp", ""))
         if not ts.startswith(today):
