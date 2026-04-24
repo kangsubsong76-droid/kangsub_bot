@@ -749,11 +749,15 @@ async function loadSignals() {
     tbody.innerHTML = '<tr><td colspan="3"><div class="empty">시그널 없음</div></td></tr>';
     return;
   }
-  tbody.innerHTML = sigs.slice(0, 6).map(s => `<tr>
-    <td style="font-weight:600">${s.name??s.code??'--'}</td>
-    <td style="color:var(--muted);font-size:10px">${(s.reason??s.signal??'').slice(0,22)}</td>
-    <td class="r ${cc(s.score??0)}">${s.score??'--'}</td>
-  </tr>`).join('');
+  tbody.innerHTML = sigs.slice(0, 6).map(s => {
+    const reason = (Array.isArray(s.reasons) ? s.reasons[0] : s.reasons) ?? s.reason ?? s.signal ?? '';
+    const score  = s.weighted_score ?? s.score;
+    return `<tr>
+      <td style="font-weight:600">${s.name??s.code??'--'}</td>
+      <td style="color:var(--muted);font-size:10px">${reason.slice(0,22)}</td>
+      <td class="r ${cc(score??0)}">${score!=null ? Number(score).toFixed(0) : '--'}</td>
+    </tr>`;
+  }).join('');
 }
 
 /* ── 시스템 상태 ────────────────────────────────────── */

@@ -302,6 +302,11 @@ def api_trading_plan():
         [s for s in signals if s.get("action") == "BUY"],
         key=lambda s: s.get("weighted_score", 0), reverse=True
     )[:5]
+    # 표시용: BUY 먼저, 그 다음 weighted_score 내림차순 (BUY가 10위 밖에 있어도 표시)
+    signals_for_display = sorted(
+        signals,
+        key=lambda s: (0 if s.get("action") == "BUY" else 1, -s.get("weighted_score", 0))
+    )[:10]
     pam_budget    = round(min(cash, total_capital * 0.5))
     pam_per_stock = round(pam_budget / len(buy_sigs)) if buy_sigs else 0
 
@@ -327,7 +332,7 @@ def api_trading_plan():
 
     return jsonify({
         "pam": {
-            "signals":          signals[:10],   # BUY + HOLD 모두 포함
+            "signals":          signals_for_display,  # BUY 우선, weighted_score 내림차순
             "budget":           pam_budget,
             "per_stock":        pam_per_stock,
             "cash":             round(cash),
