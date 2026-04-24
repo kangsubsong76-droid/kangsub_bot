@@ -169,6 +169,16 @@ class MainEngine:
 
     def morning_briefing(self):
         log.info("[08:30] Morning briefing")
+
+        # ── signals.json 오전 생성 ──────────────────────────────────────
+        # 18:00 이후 charmap 오류 등으로 signals.json 이 없을 수 있으므로
+        # 매일 08:30 브리핑 시점에 시그널을 재생성해 파일 및 _cached_signals 갱신.
+        # → 텔레그램 "정규장 매매계획" 및 대시보드 PAM 섹션이 당일 기준으로 표시됨.
+        try:
+            self.update_technical_signals()
+        except Exception as e:
+            log.warning(f"[08:30] 시그널 사전 생성 실패 (무시): {e}")
+
         kospi_df  = get_kospi_ohlcv(30)
         usdkrw_df = get_usdkrw(7)
         vkospi    = get_vkospi()
@@ -675,8 +685,10 @@ class MainEngine:
         # TODO: 리밸런싱 로직 구현
 
     def update_technical_signals(self):
-        log.info("[18:00] 기술적 분석 업데이트")
+        log.info("[signal] 기술적 시그널 생성 및 저장")
         signals = self._generate_signals()
+        # 메모리 캐시 갱신 → _get_trade_plan()이 텔레그램 메시지에 올바른 계획 반영
+        self._cached_signals = signals
         path = DATA_DIR / "signals.json"
         path.write_text(json.dumps([
             {"code": s.code, "name": s.name, "action": s.action,
@@ -685,6 +697,8 @@ class MainEngine:
              "reasons": s.reasons}
             for s in signals
         ], ensure_ascii=False, indent=2), encoding='utf-8')
+        log.info(f"[signal] signals.json 저장 완료: {len(signals)}종목 "
+                 f"(BUY {sum(1 for s in signals if s.action == 'BUY')}개)")
 
     # ── NXT 전략 (장전거래 08:00) ──────────────────────────
 
@@ -989,14 +1003,26 @@ class MainEngine:
                 ))
 
             # ── nxt_candidates.json 저장 ──────────────────────────────
-            if candidates:
-                updated = dict(candidates)
-                updated["stocks"] = eligible_stocks
-                updated["filtered_at"] = datetime.now().strftime("%H:%M:%S")
-                CANDIDATES_PATH.write_text(
-                    _json.dumps(updated, ensure_ascii=False, indent=2),
-                    encoding="utf-8"
-                )
+            # candidates 가 None이면 (Claude 전체 실패) fallback 딕셔너리 생성
+            # → 날짜가 오늘로 기록되어 execute_nxt_buy() 날짜 불일치 오류 방지
+            if not candidates:
+                candidates = {
+                    "date":          datetime.now().strftime("%Y-%m-%d"),
+                    "time":          datetime.now().strftime("%H:%M"),
+                    "stop":          False,
+                    "market_status": "진행",
+                    "stocks":        [],
+                    "nasdaq_change": 0.0,
+                    "vix":           0.0,
+                }
+            updated = dict(candidates)
+            updated["stocks"]      = eligible_stocks
+            updated["date"]        = datetime.now().strftime("%Y-%m-%d")  # 항상 오늘
+            updated["filtered_at"] = datetime.now().strftime("%H:%M:%S")
+            CANDIDATES_PATH.write_text(
+                _json.dumps(updated, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
 
             # ── 최종 결과 텔레그램 ────────────────────────────────────
             if eligible_stocks:

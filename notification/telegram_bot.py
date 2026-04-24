@@ -470,8 +470,18 @@ class TelegramCommandBot:
         self.app.run_polling()
 
     def run_in_thread(self):
-        """서브 스레드에서 안전하게 실행 — Conflict 자동 재시도"""
+        """
+        서브 스레드에서 안전하게 실행 — Conflict 자동 재시도
+
+        핵심 설계:
+        - Conflict 예외는 python-telegram-bot의 배경 asyncio Task 에서 발생하므로
+          loop.run_until_complete() 의 except 절에 전달되지 않는다.
+        - 해결: app.add_error_handler() 콜백에서 Conflict 감지 →
+          threading.Event(_stop) 을 set → _polling() while 루프 탈출 → 그레이스풀 종료.
+        - 시작 전 get_updates(offset=-1, timeout=0) 로 이전 세션의 long-poll 취소.
+        """
         import asyncio
+        import threading
         from telegram.error import Conflict
 
         retry_delay = 90   # 첫 재시도: 90초
@@ -485,34 +495,66 @@ class TelegramCommandBot:
             if self.app is None:
                 self.build()
 
-            async def _polling():
+            _stop = threading.Event()
+
+            # ── 에러 핸들러: 배경 Task의 Conflict를 여기서 잡는다 ──
+            async def _error_handler(update, context,
+                                     _s=_stop, _a=attempt, _rd=retry_delay):
+                err = context.error
+                if isinstance(err, Conflict):
+                    log.warning(
+                        f"Telegram Conflict 감지 (attempt {_a}) — "
+                        f"{_rd}초 후 자동 재시도"
+                    )
+                    _s.set()
+                else:
+                    log.error(f"Telegram bot 배경 오류: {err}")
+
+            self.app.add_error_handler(_error_handler)
+
+            async def _polling(_s=_stop, _a=attempt):
+                # 이전 세션의 120초 long-poll 취소 (Conflict 즉시 해소)
+                try:
+                    tmp = Bot(self.token)
+                    await tmp.get_updates(offset=-1, timeout=0)
+                    await tmp.close()
+                    log.debug("이전 Telegram 세션 pre-clear 완료")
+                except Exception as e:
+                    log.debug(f"pre-clear 무시: {e}")
+
                 async with self.app:
                     await self.app.start()
                     await self.app.updater.start_polling(drop_pending_updates=True)
-                    log.info(f"Telegram bot polling started (attempt {attempt})")
-                    await asyncio.Event().wait()
+                    log.info(f"Telegram bot polling started (attempt {_a})")
+                    # _stop 이 set 될 때까지 2초 간격으로 대기
+                    while not _s.is_set():
+                        await asyncio.sleep(2)
+                    # Conflict 또는 외부 신호 → 그레이스풀 셧다운
+                    log.info("Telegram bot polling 종료 중...")
+                    try:
+                        await self.app.updater.stop()
+                        await self.app.stop()
+                    except Exception as e:
+                        log.debug(f"봇 종료 중 오류 (무시): {e}")
 
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
                 loop.run_until_complete(_polling())
-                break  # 정상 종료
-            except Conflict:
-                log.warning(
-                    f"Telegram Conflict 감지 (attempt {attempt}) — "
-                    f"{retry_delay}초 후 자동 재시도"
-                )
-                try:
-                    loop.close()
-                except Exception:
-                    pass
-                time.sleep(retry_delay)
-                retry_delay = min(retry_delay * 2, 300)  # 최대 5분까지 증가
             except Exception as e:
-                log.error(f"Telegram bot error: {e}")
-                break
+                if not _stop.is_set():
+                    log.error(f"Telegram bot 예상 외 오류 — 재시작 중단: {e}")
+                    break
             finally:
                 try:
                     loop.close()
                 except Exception:
                     pass
+
+            if _stop.is_set():
+                # Conflict → 대기 후 재시도
+                log.info(f"재시도 대기 {retry_delay}초...")
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 300)  # 최대 5분
+            else:
+                break  # 정상 종료

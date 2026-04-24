@@ -31,7 +31,7 @@ from utils.logger import setup_logger
 log = setup_logger("surge_tracker")
 
 _DB_PATH = Path(__file__).parent.parent / "data" / "store" / "surge_db.json"
-_API_TIMEOUT = 12   # 외부 API 타임아웃 (초)
+_API_TIMEOUT = 25   # 외부 API 타임아웃 (초) — pykrx KOSPI+KOSDAQ 합산 조회 시간 확보
 
 # pykrx
 try:
@@ -183,10 +183,87 @@ def _fetch_pykrx(top_n: int = 50) -> list | None:
     return stocks
 
 
+# ── 3순위: yfinance 폴백 (KOSPI+KOSDAQ 전체, 당일 등락률순) ────
+def _fetch_yfinance(top_n: int = 50) -> list | None:
+    """
+    pykrx 실패 시 최후 폴백.
+    yfinance 로 KOSPI 대형주 유니버스를 조회해 등락률 상위 top_n 반환.
+    """
+    try:
+        import yfinance as yf
+        import pandas as pd
+    except ImportError:
+        log.debug("yfinance 미설치 — 폴백 불가")
+        return None
+
+    # 주요 KOSPI 종목 샘플 (유니버스 없을 때 최소 커버리지)
+    try:
+        from config.universe import get_unique_codes
+        codes = get_unique_codes()
+    except Exception:
+        codes = []
+
+    if not codes:
+        log.debug("yfinance: 유니버스 없음 — 폴백 스킵")
+        return None
+
+    tickers = [f"{c}.KS" for c in codes] + [f"{c}.KQ" for c in codes]
+
+    def _dl():
+        data = yf.download(
+            tickers, period="2d", interval="1d",
+            group_by="ticker", auto_adjust=True, progress=False, threads=True
+        )
+        return data
+
+    data = _call_with_timeout(_dl, timeout=_API_TIMEOUT)
+    if data is None or data.empty:
+        log.warning("yfinance 데이터 없음")
+        return None
+
+    rows = []
+    for ticker in tickers:
+        try:
+            code_raw = ticker.replace(".KS", "").replace(".KQ", "")
+            mkt = "KOSPI" if ticker.endswith(".KS") else "KOSDAQ"
+            if ticker in data.columns.get_level_values(0):
+                df = data[ticker]
+            else:
+                continue
+            if len(df) < 2:
+                continue
+            prev_close = float(df["Close"].iloc[-2])
+            today_close = float(df["Close"].iloc[-1])
+            if prev_close <= 0:
+                continue
+            change_rate = (today_close - prev_close) / prev_close * 100
+            volume = int(df["Volume"].iloc[-1])
+            rows.append({
+                "code":        code_raw.zfill(6),
+                "name":        code_raw,
+                "price":       int(today_close),
+                "change_rate": round(change_rate, 2),
+                "volume":      volume,
+                "market":      mkt,
+            })
+        except Exception:
+            continue
+
+    if not rows:
+        return None
+
+    rows.sort(key=lambda r: r["change_rate"], reverse=True)
+    for i, r in enumerate(rows[:top_n], 1):
+        r["rank"] = i
+
+    log.info(f"yfinance 급상승 폴백: Top{top_n} 중 {len(rows[:top_n])}종목 수집")
+    return rows[:top_n]
+
+
 # ── 공개: 수집 메인 ─────────────────────────────────────────
 def collect(top_n: int = 50) -> list:
     """
-    10:30 호출 → 키움 ka10027 → pykrx 폴백 → DB 저장
+    10:30 호출 → 키움 ka10027 → pykrx 폴백 → yfinance 최종 폴백 → DB 저장
     반환: 수집된 Top50 리스트 (실패 시 빈 리스트)
     """
     now = datetime.now()
@@ -195,7 +272,7 @@ def collect(top_n: int = 50) -> list:
 
     log.info(f"[surge_tracker] Top{top_n} 급상승 수집 시작 ({collected_at})")
 
-    stocks = _fetch_kiwoom(top_n) or _fetch_pykrx(top_n)
+    stocks = _fetch_kiwoom(top_n) or _fetch_pykrx(top_n) or _fetch_yfinance(top_n)
 
     if not stocks:
         log.error("[surge_tracker] 급상승 데이터 수집 실패 — 전체 소스 응답 없음")
