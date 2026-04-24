@@ -64,11 +64,11 @@ html, body {
 .mkt-bar { display: flex; align-items: stretch; flex: 1; height: 100%; overflow: hidden; }
 .mi {
   display: flex; flex-direction: column; justify-content: center;
-  padding: 0 13px; border-right: 1px solid var(--border); min-width: 105px;
+  padding: 0 9px; border-right: 1px solid var(--border); min-width: 76px;
 }
-.mi-lbl { font-size: 10px; color: var(--muted); letter-spacing: .4px; }
-.mi-val { font-size: 14px; font-weight: 700; }
-.mi-chg { font-size: 11px; }
+.mi-lbl { font-size: 9px; color: var(--muted); letter-spacing: .3px; }
+.mi-val { font-size: 13px; font-weight: 700; }
+.mi-chg { font-size: 10px; }
 
 /* 봇 활동 인디케이터 */
 .activity-ticker {
@@ -115,8 +115,8 @@ html, body {
 #main {
   position: fixed; top: var(--hdr); left: 0; right: 0; bottom: 0;
   display: grid;
-  grid-template-columns: 320px 1fr 295px;
-  grid-template-rows: 1fr 178px 210px;
+  grid-template-columns: 250px 1fr 1fr 240px;
+  grid-template-rows: 1fr 195px 155px;
   gap: 4px; padding: 4px; background: #04080f;
 }
 
@@ -369,33 +369,23 @@ tr:hover td { background: rgba(58,142,255,.05); }
   </div>
 
   <div class="mkt-bar">
-    <div class="mi">
-      <span class="mi-lbl">KOSPI</span>
-      <span class="mi-val" id="hk-kospi">--</span>
-      <span class="mi-chg" id="hk-kospi-c">--</span>
-    </div>
-    <div class="mi">
-      <span class="mi-lbl">KOSDAQ</span>
-      <span class="mi-val" id="hk-kosdaq">--</span>
-      <span class="mi-chg" id="hk-kosdaq-c">--</span>
-    </div>
-    <div class="mi">
-      <span class="mi-lbl">USD/KRW</span>
-      <span class="mi-val" id="hk-usd">--</span>
-      <span class="mi-chg" id="hk-usd-c">--</span>
-    </div>
-    <div class="mi">
-      <span class="mi-lbl">S&amp;P500</span>
-      <span class="mi-val" id="hk-sp">--</span>
-      <span class="mi-chg" id="hk-sp-c">--</span>
-    </div>
-    <div class="mi" style="min-width:100px">
-      <span class="mi-lbl">봇 상태</span>
+    <!-- 국내 시장 -->
+    <div class="mi"><span class="mi-lbl">KOSPI</span><span class="mi-val" id="hk-kospi">--</span><span class="mi-chg" id="hk-kospi-c">--</span></div>
+    <div class="mi"><span class="mi-lbl">KOSDAQ</span><span class="mi-val" id="hk-kosdaq">--</span><span class="mi-chg" id="hk-kosdaq-c">--</span></div>
+    <div class="mi"><span class="mi-lbl">USD/KRW</span><span class="mi-val" id="hk-usd">--</span><span class="mi-chg" id="hk-usd-c">--</span></div>
+    <!-- 글로벌 -->
+    <div class="mi"><span class="mi-lbl">S&amp;P500</span><span class="mi-val" id="hk-sp">--</span><span class="mi-chg" id="hk-sp-c">--</span></div>
+    <div class="mi"><span class="mi-lbl">VIX</span><span class="mi-val" id="hk-vix">--</span><span class="mi-chg" id="hk-vix-c">--</span></div>
+    <div class="mi"><span class="mi-lbl">WTI</span><span class="mi-val" id="hk-wti">--</span><span class="mi-chg" id="hk-wti-c">--</span></div>
+    <div class="mi"><span class="mi-lbl">Gold</span><span class="mi-val" id="hk-gold">--</span><span class="mi-chg" id="hk-gold-c">--</span></div>
+    <div class="mi"><span class="mi-lbl">US10Y</span><span class="mi-val" id="hk-us10y">--</span><span class="mi-chg" id="hk-us10y-c">--</span></div>
+    <!-- 봇 상태 -->
+    <div class="mi" style="min-width:88px;background:rgba(0,0,0,.2)">
+      <span class="mi-lbl">시스템</span>
       <span class="mi-val" id="hk-bot" style="font-size:11px">--</span>
-      <span class="mi-chg" id="hk-mode" style="color:var(--muted)">--</span>
+      <span class="mi-chg" id="hk-mode" style="color:var(--muted);font-size:9px">--</span>
     </div>
-
-    <!-- 봇 활동 티커 -->
+    <!-- 활동 티커 -->
     <div class="activity-ticker">
       <div class="activity-dot"></div>
       <span id="activity-msg">시스템 초기화 중...</span>
@@ -415,8 +405,8 @@ tr:hover td { background: rgba(58,142,255,.05); }
 <!-- ══ 메인 그리드 ════════════════════════════════════ -->
 <div id="main">
 
-  <!-- ① NXT 급상승 예측 (col1 row1) -->
-  <div class="pnl" style="grid-column:1;grid-row:1">
+  <!-- ① NXT 급상승 예측 (col3 row1) -->
+  <div class="pnl" style="grid-column:3;grid-row:1">
     <div class="pnl-hd">
       <span class="ico">📡</span> NXT 급상승 예측
       <span id="nxt-stale-icon" title="" style="display:none;margin-left:4px;font-size:14px;cursor:help">⚠️</span>
@@ -502,8 +492,8 @@ tr:hover td { background: rgba(58,142,255,.05); }
     </div>
   </div>
 
-  <!-- ③ 봇 실시간 로그 (col3 row1) ── 핵심 신규 패널 -->
-  <div class="pnl" style="grid-column:3;grid-row:1">
+  <!-- ③ 봇 실시간 로그 (col4 row1) -->
+  <div class="pnl" style="grid-column:4;grid-row:1">
     <div class="pnl-hd" style="position:relative;overflow:hidden">
       <span class="ico">⚡</span> 봇 실시간 로그
       <!-- 미니 스캔 라인 -->
@@ -539,14 +529,14 @@ tr:hover td { background: rgba(58,142,255,.05); }
     </div>
   </div>
 
-  <!-- ④ 글로벌 시장 + 뉴스/정책 탭 (col1 row2) -->
-  <div class="pnl" style="grid-column:1;grid-row:2">
+  <!-- ④ 시장 분석 & 시사점 (col1 row1) — 뉴스+정책 탭 -->
+  <div class="pnl" style="grid-column:1;grid-row:1">
     <div class="pnl-hd" style="padding:0;gap:0;overflow:visible">
       <!-- 탭 헤더 -->
       <div style="display:flex;align-items:stretch;height:100%;width:100%">
-        <div style="display:flex;align-items:center;gap:6px;padding:0 12px;border-right:1px solid var(--border);flex-shrink:0">
-          <span class="ico" style="font-size:12px">🌍</span>
-          <span style="font-size:11px;font-weight:700;color:#8aaace;letter-spacing:.3px">글로벌 시장</span>
+        <div style="display:flex;align-items:center;gap:5px;padding:0 10px;border-right:1px solid var(--border);flex-shrink:0">
+          <span class="ico" style="font-size:12px">📊</span>
+          <span style="font-size:11px;font-weight:700;color:#8aaace;letter-spacing:.3px">시장 분석</span>
         </div>
         <button id="tab-btn-news" onclick="switchGlobalTab('news')"
           style="padding:0 12px;border:none;background:rgba(0,212,255,.12);cursor:pointer;font-size:10px;font-weight:700;color:var(--cyan);border-right:1px solid var(--border);height:100%">
@@ -611,8 +601,8 @@ tr:hover td { background: rgba(58,142,255,.05); }
     </div>
   </div>
 
-  <!-- ⑤ 스케줄러 & 시스템 (col2 row2) -->
-  <div class="pnl" style="grid-column:2;grid-row:2">
+  <!-- ⑤ 봇 스케줄러 (col4 row3) -->
+  <div class="pnl" style="grid-column:4;grid-row:3">
     <div class="pnl-hd">
       <span class="ico">⚙️</span> 봇 스케줄러
       <span id="sched-progress" style="margin-left:6px;font-size:10px;color:var(--up)"></span>
@@ -627,8 +617,8 @@ tr:hover td { background: rgba(58,142,255,.05); }
     </div>
   </div>
 
-  <!-- ⑥ 시간외 단일가 (col3 row2) -->
-  <div class="pnl" style="grid-column:3;grid-row:2">
+  <!-- ⑥ 시간외 단일가 (col1 row3) -->
+  <div class="pnl" style="grid-column:1;grid-row:3">
     <div class="pnl-hd">
       <span class="ico">🕐</span> 시간외 단일가
       <span style="margin-left:auto;font-size:10px;color:var(--muted)" id="ah-upd">--</span>
@@ -638,8 +628,33 @@ tr:hover td { background: rgba(58,142,255,.05); }
     </div>
   </div>
 
-  <!-- ⑦ 오늘의 매매 계획 + 결과 (col1-3 row3) -->
-  <div class="pnl" style="grid-column:1/-1;grid-row:3">
+  <!-- ⑦ 봇 주요 브리핑 (col2-3 row3) -->
+  <div class="pnl" style="grid-column:2/4;grid-row:3">
+    <div class="pnl-hd">
+      <span class="ico">📋</span> 봇 주요 브리핑
+      <span style="margin-left:auto;font-size:10px;color:var(--muted)" id="brief-upd">--</span>
+    </div>
+    <div class="pnl-bd" style="padding:5px 10px;display:flex;gap:6px;min-height:0">
+      <!-- 시그널 요약 -->
+      <div style="flex:1;min-width:0;border-right:1px solid var(--border);padding-right:6px">
+        <div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.4px;margin-bottom:4px">📡 TOP BUY 시그널</div>
+        <div id="brief-signals" style="overflow-y:auto;max-height:100px"><div class="empty" style="font-size:10px">로딩 중...</div></div>
+      </div>
+      <!-- NXT 요약 -->
+      <div style="flex:1;min-width:0;border-right:1px solid var(--border);padding-right:6px">
+        <div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.4px;margin-bottom:4px">⚡ NXT 장전 요약</div>
+        <div id="brief-nxt" style="overflow-y:auto;max-height:100px"><div class="empty" style="font-size:10px">로딩 중...</div></div>
+      </div>
+      <!-- 시장 요약 -->
+      <div style="flex:1;min-width:0">
+        <div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.4px;margin-bottom:4px">🌐 시장 컨디션</div>
+        <div id="brief-market" style="overflow-y:auto;max-height:100px"><div class="empty" style="font-size:10px">로딩 중...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑧ 오늘의 매매 계획 + 결과 (col1-4 row2) -->
+  <div class="pnl" style="grid-column:1/-1;grid-row:2">
     <div class="bottom-grid">
 
       <!-- NXT 장전거래 -->
@@ -770,6 +785,11 @@ async function loadMarket() {
   setMi('hk-kosdaq', 'hk-kosdaq-c', d.kosdaq);
   setMi('hk-usd',    'hk-usd-c',    d.usdkrw);
   setMi('hk-sp',     'hk-sp-c',     d.sp500);
+  // 헤더 글로벌 지표
+  if (d.vix)   { const e=document.getElementById('hk-vix');   const c=document.getElementById('hk-vix-c');   if(e) e.textContent=Number(d.vix.price).toFixed(2);   if(c){c.textContent=pct(d.vix.change_pct);   colorEl(c,d.vix.change_pct);   } }
+  if (d.wti)   { const e=document.getElementById('hk-wti');   const c=document.getElementById('hk-wti-c');   if(e) e.textContent='$'+Number(d.wti.price).toFixed(1); if(c){c.textContent=pct(d.wti.change_pct);   colorEl(c,d.wti.change_pct);   } }
+  if (d.gold)  { const e=document.getElementById('hk-gold');  const c=document.getElementById('hk-gold-c');  if(e) e.textContent='$'+W.format(Math.round(d.gold.price)); if(c){c.textContent=pct(d.gold.change_pct); colorEl(c,d.gold.change_pct); } }
+  if (d.us10y) { const e=document.getElementById('hk-us10y'); const c=document.getElementById('hk-us10y-c'); if(e) e.textContent=Number(d.us10y.price).toFixed(2)+'%'; if(c){c.textContent=pct(d.us10y.change_pct); colorEl(c,d.us10y.change_pct); } }
 
   // 글로벌 지표 패널 업데이트
   if (d.vix) {
@@ -1312,6 +1332,70 @@ async function loadDayPlan() {
   renderTrades(pamTrades, 'pam-result-list', 'pam-result-pnl');
 }
 
+/* ── 봇 브리핑 ─────────────────────────────────────── */
+async function loadBriefing() {
+  const [sigs, plan, mkt] = await Promise.all([
+    req('/api/signals'), req('/api/trading_plan'), req('/api/market')
+  ]);
+  const updEl = document.getElementById('brief-upd');
+  if (updEl) updEl.textContent = new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) + ' 기준';
+
+  // TOP BUY 시그널
+  const sigEl = document.getElementById('brief-signals');
+  if (sigEl && Array.isArray(sigs)) {
+    const buys = sigs.filter(s => s.action === 'BUY').slice(0, 5);
+    if (!buys.length) {
+      sigEl.innerHTML = '<div class="empty" style="font-size:10px">BUY 없음</div>';
+    } else {
+      sigEl.innerHTML = buys.map(s => {
+        const sc = s.weighted_score ?? '--';
+        const ps = s.policy_score && Math.abs(s.policy_score) >= 1 ? `<span style="color:${s.policy_score>0?'var(--up)':'var(--down)'}"> 정책${s.policy_score>0?'+':''}${Number(s.policy_score).toFixed(0)}</span>` : '';
+        const rsi = s.rsi ? `RSI ${Number(s.rsi).toFixed(0)}` : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid rgba(27,42,66,.5)">
+          <div>
+            <span style="font-size:11px;font-weight:700;color:var(--up)">${s.name??s.code}</span>
+            ${rsi ? `<span style="font-size:9px;color:var(--muted);margin-left:4px">${rsi}</span>` : ''}
+          </div>
+          <div style="text-align:right">
+            <span style="font-size:11px;font-weight:700;color:var(--up)">${sc}점</span>${ps}
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // NXT 요약
+  const nxtEl = document.getElementById('brief-nxt');
+  if (nxtEl && plan?.nxt) {
+    const n = plan.nxt;
+    const ss = n.stocks || [];
+    if (!ss.length) {
+      nxtEl.innerHTML = `<div style="font-size:10px;color:var(--muted)">${n.stop ? '⛔ 오늘 매매중단' : '07:35 분석 대기'}</div>`;
+    } else {
+      nxtEl.innerHTML = ss.slice(0,4).map(s => {
+        const chg = s.change_rate != null ? `${s.change_rate>0?'+':''}${Number(s.change_rate).toFixed(1)}%` : '--';
+        const conf = s.confidence || '--';
+        return `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid rgba(27,42,66,.5)">
+          <span style="font-size:11px;font-weight:700;color:var(--gold)">${s.name??'--'}</span>
+          <span style="font-size:10px;color:var(--muted)">${conf} · ${chg}</span>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // 시장 컨디션
+  const mktEl = document.getElementById('brief-market');
+  if (mktEl && mkt) {
+    const rows = [
+      mkt.kospi  ? `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid rgba(27,42,66,.5)"><span style="font-size:10px;color:var(--muted)">KOSPI</span><span style="font-size:11px;font-weight:700">${W.format(Math.round(mkt.kospi.price??0))} <span class="${(mkt.kospi.change_pct??0)>=0?'pos':'neg'}">${pct(mkt.kospi.change_pct)}</span></span></div>` : '',
+      mkt.vix    ? `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid rgba(27,42,66,.5)"><span style="font-size:10px;color:var(--muted)">VIX 공포</span><span style="font-size:11px;font-weight:700;color:${(mkt.vix.price??30)<20?'var(--up)':(mkt.vix.price??30)<30?'var(--mid)':'var(--down)'}">${Number(mkt.vix.price??0).toFixed(1)}</span></div>` : '',
+      mkt.usdkrw ? `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid rgba(27,42,66,.5)"><span style="font-size:10px;color:var(--muted)">USD/KRW</span><span style="font-size:11px;font-weight:700">${W.format(Math.round(mkt.usdkrw.price??0))}</span></div>` : '',
+      mkt.gold   ? `<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="font-size:10px;color:var(--muted)">Gold</span><span style="font-size:11px;font-weight:700">$${W.format(Math.round(mkt.gold.price??0))}</span></div>` : '',
+    ].filter(Boolean).join('');
+    mktEl.innerHTML = rows || '<div class="empty" style="font-size:10px">데이터 없음</div>';
+  }
+}
+
 /* ── 탭 전환 ────────────────────────────────────────── */
 function switchGlobalTab(tab) {
   const tabs   = ['news', 'policy'];
@@ -1449,7 +1533,7 @@ async function loadAll() {
   await Promise.allSettled([
     loadMarket(), loadPortfolio(), loadSignals(),
     loadNXT(), loadAfterHours(), loadStatus(), loadScheduler(),
-    loadBotLog(), loadDayPlan(), loadNews(), loadPolicy(),
+    loadBotLog(), loadDayPlan(), loadNews(), loadPolicy(), loadBriefing(),
   ]);
   setRef(false);
 }
@@ -1459,6 +1543,7 @@ setInterval(loadMarket,     5000);   // 시장 5초
 setInterval(loadBotLog,     8000);   // 봇 로그 8초
 setInterval(loadScheduler,  15000);  // 스케줄러 15초
 setInterval(rotateTicker,   4000);   // 헤더 ticker 4초
+setInterval(loadBriefing,   20000);  // 브리핑 20초
 setInterval(loadNews,       60000);  // 뉴스 1분
 setInterval(loadAll,        30000);  // 전체 30초
 </script>
