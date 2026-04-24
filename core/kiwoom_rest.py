@@ -23,7 +23,7 @@
   ka10027  전일대비등락률상위    POST /api/dostk/rkinfo  (mrkt_tp: 000/001/101)
   ka10028  시가대비등락률        POST /api/dostk/stkinfo
   ka10081  주식일봉차트          POST /api/dostk/chart
-  ka10008  업종일봉차트          POST /api/dostk/chart  (001=KOSPI, 101=KOSDAQ)
+  ka20006  업종일봉차트          POST /api/dostk/chart  (inds_cd: 001=KOSPI, 101=KOSDAQ)
   ka10075  미체결요청            POST /api/dostk/acnt
   kt10000  주식 매수주문         POST /api/dostk/ordr
   kt10001  주식 매도주문         POST /api/dostk/ordr
@@ -644,25 +644,28 @@ class KiwoomRestAPI:
         return df.tail(days)
 
     # ════════════════════════════════════════════════════════
-    # ── 업종 일봉 차트 (ka10008) — KOSPI/KOSDAQ 지수
+    # ── 업종 일봉 차트 (ka20006) — KOSPI/KOSDAQ 지수
     # ════════════════════════════════════════════════════════
     def get_index_ohlcv(self, index_code: str = "001", days: int = 120) -> "pd.DataFrame":
         """
-        업종일봉차트조회 (ka10008)
-        index_code: "001"=KOSPI, "101"=KOSDAQ
-        반환: DataFrame [open, high, low, close, volume] index=date(str)
+        업종일봉조회요청 (ka20006) — 공식 문서 p.265
+        URL        : /api/dostk/chart
+        index_code : "001"=KOSPI, "101"=KOSDAQ (업종코드 참고)
+        반환       : DataFrame [open, high, low, close, volume] index=date(str)
+
+        ※ 가격 필드는 소수점 제거 후 100배 값으로 반환됨 (예: KOSPI 2500 → 250000)
         """
         import pandas as pd
         from datetime import datetime
         body = {
-            "upjong_cd": index_code,
-            "base_dt":   datetime.now().strftime("%Y%m%d"),
+            "inds_cd": index_code,                       # 업종코드 (p.265)
+            "base_dt": datetime.now().strftime("%Y%m%d"), # 기준일자 YYYYMMDD
         }
-        data = self._post("/api/dostk/chart", body, "ka10008")
+        data = self._post("/api/dostk/chart", body, "ka20006")
         if not data or data.get("return_code") != 0:
-            log.warning(f"ka10008 조회 실패 ({index_code}): {data.get('return_msg') if data else 'None'}")
+            log.warning(f"ka20006 조회 실패 ({index_code}): {data.get('return_msg') if data else 'None'}")
             return pd.DataFrame()
-        rows = data.get("upjong_dt_pole_chart_qry", [])
+        rows = data.get("inds_dt_pole_qry", [])           # 응답 리스트 키 (p.265)
         if not rows:
             return pd.DataFrame()
         records = []
@@ -670,11 +673,11 @@ class KiwoomRestAPI:
             try:
                 records.append({
                     "date":   str(r.get("dt", "")),
-                    "open":   float(str(r.get("open_pric",  0)).replace(",", "")),
-                    "high":   float(str(r.get("high_pric",  0)).replace(",", "")),
-                    "low":    float(str(r.get("low_pric",   0)).replace(",", "")),
-                    "close":  float(str(r.get("cur_prc",    r.get("close_pric", 0))).replace(",", "")),
-                    "volume": float(str(r.get("acml_vol",   r.get("trde_qty",   0))).replace(",", "")),
+                    "open":   float(str(r.get("open_pric", 0)).replace(",", "")),
+                    "high":   float(str(r.get("high_pric", 0)).replace(",", "")),
+                    "low":    float(str(r.get("low_pric",  0)).replace(",", "")),
+                    "close":  float(str(r.get("cur_prc",   0)).replace(",", "")),
+                    "volume": float(str(r.get("trde_qty",  0)).replace(",", "")),
                 })
             except Exception:
                 continue
