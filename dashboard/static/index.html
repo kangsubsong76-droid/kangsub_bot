@@ -539,14 +539,28 @@ tr:hover td { background: rgba(58,142,255,.05); }
     </div>
   </div>
 
-  <!-- ④ 글로벌 시장 + 뉴스 (col1 row2) -->
+  <!-- ④ 글로벌 시장 + 뉴스/정책 탭 (col1 row2) -->
   <div class="pnl" style="grid-column:1;grid-row:2">
-    <div class="pnl-hd">
-      <span class="ico">🌍</span> 글로벌 시장 &amp; 뉴스
-      <span style="margin-left:auto;font-size:10px;color:var(--muted)" id="news-upd">--</span>
+    <div class="pnl-hd" style="padding:0;gap:0;overflow:visible">
+      <!-- 탭 헤더 -->
+      <div style="display:flex;align-items:stretch;height:100%;width:100%">
+        <div style="display:flex;align-items:center;gap:6px;padding:0 12px;border-right:1px solid var(--border);flex-shrink:0">
+          <span class="ico" style="font-size:12px">🌍</span>
+          <span style="font-size:11px;font-weight:700;color:#8aaace;letter-spacing:.3px">글로벌 시장</span>
+        </div>
+        <button id="tab-btn-news" onclick="switchGlobalTab('news')"
+          style="padding:0 12px;border:none;background:rgba(0,212,255,.12);cursor:pointer;font-size:10px;font-weight:700;color:var(--cyan);border-right:1px solid var(--border);height:100%">
+          📰 뉴스
+        </button>
+        <button id="tab-btn-policy" onclick="switchGlobalTab('policy')"
+          style="padding:0 12px;border:none;background:transparent;cursor:pointer;font-size:10px;font-weight:700;color:var(--muted);height:100%">
+          🏛️ 정책
+        </button>
+        <span style="margin-left:auto;padding:0 10px;font-size:10px;color:var(--muted);display:flex;align-items:center" id="news-upd">--</span>
+      </div>
     </div>
     <div class="pnl-bd" style="padding:6px 10px;display:flex;flex-direction:column;gap:5px;min-height:0">
-      <!-- 글로벌 4개 지표 -->
+      <!-- 글로벌 4개 지표 (항상 표시) -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;flex-shrink:0">
         <div class="gcard">
           <span class="gn">VIX 공포지수</span>
@@ -569,22 +583,30 @@ tr:hover td { background: rgba(58,142,255,.05); }
           <span class="gc" id="m-us10y-c">--</span>
         </div>
       </div>
-      <!-- 뉴스 감성 바 -->
-      <div style="flex-shrink:0">
-        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-bottom:3px">
-          <span id="news-pos-pct">긍정 --</span>
-          <span id="news-total-txt">뉴스 0건</span>
-          <span id="news-neg-pct">부정 --</span>
+
+      <!-- 뉴스 탭 콘텐츠 -->
+      <div id="tab-panel-news" style="flex:1;display:flex;flex-direction:column;gap:4px;min-height:0">
+        <div style="flex-shrink:0">
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-bottom:3px">
+            <span id="news-pos-pct">긍정 --</span>
+            <span id="news-total-txt">뉴스 0건</span>
+            <span id="news-neg-pct">부정 --</span>
+          </div>
+          <div class="sent-bar">
+            <div class="sent-pos" id="news-pos-fill" style="width:0%"></div>
+            <div class="sent-neu"></div>
+            <div class="sent-neg" id="news-neg-fill" style="width:0%"></div>
+          </div>
         </div>
-        <div class="sent-bar">
-          <div class="sent-pos" id="news-pos-fill" style="width:0%"></div>
-          <div class="sent-neu"></div>
-          <div class="sent-neg" id="news-neg-fill" style="width:0%"></div>
+        <div id="news-feed" style="flex:1;overflow-y:auto;min-height:0">
+          <div class="empty" style="font-size:10px">뉴스 로딩 중...</div>
         </div>
       </div>
-      <!-- 뉴스 헤드라인 -->
-      <div id="news-feed" style="flex:1;overflow-y:auto;min-height:0">
-        <div class="empty" style="font-size:10px">뉴스 로딩 중...</div>
+
+      <!-- 정책 탭 콘텐츠 (기본 숨김) -->
+      <div id="tab-panel-policy" style="flex:1;display:none;flex-direction:column;gap:4px;min-height:0;overflow-y:auto">
+        <div id="policy-meeting" style="font-size:9px;color:var(--muted);flex-shrink:0;padding-bottom:3px;border-bottom:1px solid var(--border)">로딩 중...</div>
+        <div id="policy-sectors" style="display:flex;flex-direction:column;gap:3px;overflow-y:auto;flex:1;min-height:0"></div>
       </div>
     </div>
   </div>
@@ -870,6 +892,7 @@ async function loadSignals() {
       <td class="r ${cc(score??0)}" style="white-space:nowrap;vertical-align:top;padding-top:7px">
         <div style="font-size:13px;font-weight:700">${score!=null ? Number(score).toFixed(0) : '--'}</div>
         ${ts!=null&&ns!=null ? `<div style="font-size:10px;color:var(--muted)">기${ts}·뉴${ns}</div>` : ''}
+        ${s.policy_score && Math.abs(s.policy_score) >= 1 ? `<div style="font-size:9px;color:${s.policy_score>0?'var(--up)':'var(--down)'}">정책${s.policy_score>0?'+':''}${Number(s.policy_score).toFixed(0)}</div>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -1289,6 +1312,22 @@ async function loadDayPlan() {
   renderTrades(pamTrades, 'pam-result-list', 'pam-result-pnl');
 }
 
+/* ── 탭 전환 ────────────────────────────────────────── */
+function switchGlobalTab(tab) {
+  const tabs   = ['news', 'policy'];
+  const colors = { news: 'var(--cyan)', policy: 'var(--gold)' };
+  tabs.forEach(t => {
+    const btn   = document.getElementById(`tab-btn-${t}`);
+    const panel = document.getElementById(`tab-panel-${t}`);
+    const active = t === tab;
+    if (btn) {
+      btn.style.background = active ? (t === 'news' ? 'rgba(0,212,255,.12)' : 'rgba(255,165,0,.12)') : 'transparent';
+      btn.style.color      = active ? colors[t] : 'var(--muted)';
+    }
+    if (panel) panel.style.display = active ? 'flex' : 'none';
+  });
+}
+
 /* ── 뉴스 ──────────────────────────────────────────── */
 async function loadNews() {
   const d = await req('/api/news');
@@ -1336,13 +1375,81 @@ async function loadNews() {
   }).join('');
 }
 
+/* ── 정책 모니터 ────────────────────────────────────── */
+async function loadPolicy() {
+  const d = await req('/api/policy');
+  if (!d || !d.sector_boost) return;
+
+  // 업데이트 시간 (탭 헤더에 표시)
+  const updEl = document.getElementById('news-upd');
+  if (updEl && d.updated) updEl.textContent = `📅 ${d.updated}`;
+
+  // 최신 회의 헤더
+  const meetEl = document.getElementById('policy-meeting');
+  if (meetEl && d.meetings && d.meetings.length) {
+    const m = d.meetings[0];
+    const impColor = m.impact === 'POSITIVE' ? 'var(--up)' : m.impact === 'NEGATIVE' ? 'var(--down)' : 'var(--mid)';
+    meetEl.innerHTML = `<span style="color:${impColor};font-weight:700">[${m.type} ${m.date}]</span> ${escHtml(m.headline||'')}`;
+  }
+
+  // 최신 국무회의 결정 사항 + 섹터 부스트 바
+  const secEl = document.getElementById('policy-sectors');
+  if (!secEl) return;
+
+  const boost = d.sector_boost || {};
+  const labels = d.sector_labels || {};
+  const maxBoost = Math.max(...Object.values(boost).map(Math.abs), 1);
+
+  // 섹터 바 (부스트 크기 순 정렬)
+  const sorted = Object.entries(boost).sort((a, b) => b[1] - a[1]);
+  const barsHtml = sorted.map(([key, val]) => {
+    const label   = labels[key] || key;
+    const barW    = Math.abs(val) / maxBoost * 100;
+    const barColor = val > 5 ? 'var(--up)' : val > 0 ? '#4aaa6e' : val < -2 ? 'var(--down)' : 'var(--muted)';
+    const sign    = val > 0 ? `+${val}` : `${val}`;
+    return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0">
+      <span style="font-size:9px;color:var(--muted);width:72px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(label)}</span>
+      <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${barW}%;background:${barColor};border-radius:3px;transition:width .5s"></div>
+      </div>
+      <span style="font-size:10px;font-weight:700;color:${barColor};width:24px;text-align:right;flex-shrink:0">${sign}</span>
+    </div>`;
+  }).join('');
+
+  // 최신 회의 결정 사항 목록
+  const decisions = (d.meetings || []).flatMap(m =>
+    (m.decisions || []).map(dec => ({...dec, meeting_type: m.type, date: m.date}))
+  ).slice(0, 6);
+
+  const decsHtml = decisions.map(dec => {
+    const impact = dec.impact || '';
+    const ic = impact === 'STRONG_BUY' ? 'var(--up)' : impact === 'BUY' ? '#4aaa6e' :
+               impact === 'SELL' ? 'var(--down)' : 'var(--muted)';
+    const iMark = impact === 'STRONG_BUY' ? '★★' : impact === 'BUY' ? '★' :
+                  impact === 'SELL' ? '▼' : '─';
+    const tagStyle = `font-size:9px;padding:0 4px;border-radius:2px;background:rgba(58,142,255,.1);border:1px solid rgba(58,142,255,.25);color:var(--blue);flex-shrink:0`;
+    return `<div style="display:flex;gap:4px;align-items:flex-start;padding:3px 0;border-bottom:1px solid rgba(27,42,66,.4)">
+      <span style="color:${ic};font-size:10px;flex-shrink:0;font-weight:700;min-width:14px">${iMark}</span>
+      <span style="font-size:10px;color:var(--text);line-height:1.4;flex:1">${escHtml(dec.text||'')}</span>
+      ${dec.tag ? `<span style="${tagStyle}">${escHtml(dec.tag)}</span>` : ''}
+    </div>`;
+  }).join('');
+
+  secEl.innerHTML = `
+    <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.4px;padding-bottom:3px;flex-shrink:0">SECTOR BOOST</div>
+    ${barsHtml}
+    <div style="font-size:9px;color:var(--muted);font-weight:700;letter-spacing:.4px;padding:6px 0 3px;flex-shrink:0;border-top:1px solid var(--border);margin-top:3px">주요 결정</div>
+    ${decsHtml}
+  `;
+}
+
 /* ── 메인 로드 ─────────────────────────────────────── */
 async function loadAll() {
   setRef(true);
   await Promise.allSettled([
     loadMarket(), loadPortfolio(), loadSignals(),
     loadNXT(), loadAfterHours(), loadStatus(), loadScheduler(),
-    loadBotLog(), loadDayPlan(), loadNews(),
+    loadBotLog(), loadDayPlan(), loadNews(), loadPolicy(),
   ]);
   setRef(false);
 }

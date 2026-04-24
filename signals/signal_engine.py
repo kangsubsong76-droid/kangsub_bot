@@ -1,4 +1,4 @@
-"""종합 시그널 엔진 — 기술적 + 시장 + 뉴스 시그널 통합 판단"""
+"""종합 시그널 엔진 — 기술적 + 시장 + 뉴스 + 정책 시그널 통합 판단"""
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
@@ -20,8 +20,10 @@ class CompositeSignal:
     news_score: float
     weighted_score: float
     reasons: list[str]
-    close_price: float = 0.0   # 최근 종가
-    rsi: float = 0.0           # RSI (표시용)
+    close_price: float = 0.0    # 최근 종가
+    rsi: float = 0.0            # RSI (표시용)
+    policy_score: float = 0.0   # 정책 부스트 점수 (-15 ~ +15)
+    sector: str = ""            # 유니버스 섹터 키
     timestamp: datetime = None
 
     def __post_init__(self):
@@ -31,9 +33,11 @@ class CompositeSignal:
 
 class SignalEngine:
     # 가중치: 기술적 40%, 시장 30%, 뉴스 30%
+    # 정책 boost는 가중합 이후 가산 (최대 ±15점)
     WEIGHT_TECHNICAL = 0.40
     WEIGHT_MARKET = 0.30
     WEIGHT_NEWS = 0.30
+    POLICY_BOOST_CAP = 15.0   # 정책 부스트 상한
 
     # 임계값
     BUY_THRESHOLD = 65
@@ -45,14 +49,20 @@ class SignalEngine:
         self,
         tech: TechnicalSignal,
         market: MarketCondition,
-        news_score: float = 50.0,  # 0~100, 기본 중립
+        news_score: float = 50.0,   # 0~100, 기본 중립
         news_reasons: list[str] = None,
+        policy_boost: float = 0.0,  # 정책 부스트 (policy_monitor.json 기반)
+        sector: str = "",           # 유니버스 섹터 키
     ) -> CompositeSignal:
-        weighted = (
+        base_weighted = (
             tech.score * self.WEIGHT_TECHNICAL
             + market.score * self.WEIGHT_MARKET
             + news_score * self.WEIGHT_NEWS
         )
+        # 정책 부스트 적용 (범위 제한)
+        effective_boost = max(-self.POLICY_BOOST_CAP, min(self.POLICY_BOOST_CAP, policy_boost))
+        weighted = base_weighted + effective_boost
+
         reasons = []
 
         # 기술적 분석 이유
@@ -90,6 +100,12 @@ class SignalEngine:
         if news_reasons:
             reasons.extend(news_reasons[:3])
 
+        # 정책 부스트 이유 (|boost| >= 3 이상일 때만 표시)
+        if effective_boost >= 3:
+            reasons.append(f"🏛️ 정책수혜 ({sector}) +{effective_boost:.0f}점")
+        elif effective_boost <= -3:
+            reasons.append(f"🏛️ 정책역풍 ({sector}) {effective_boost:.0f}점")
+
         # 매매 판단
         if weighted >= self.STRONG_BUY_THRESHOLD:
             action = "BUY"
@@ -123,6 +139,8 @@ class SignalEngine:
             weighted_score=round(weighted, 1),
             reasons=reasons,
             rsi=round(tech.rsi, 1) if tech.rsi else 0.0,
+            policy_score=round(effective_boost, 1),
+            sector=sector,
         )
 
     def generate_batch_signals(
@@ -130,14 +148,18 @@ class SignalEngine:
         tech_signals: list[TechnicalSignal],
         market: MarketCondition,
         news_scores: dict[str, tuple[float, list[str]]] = None,
+        policy_boosts: dict[str, tuple[float, str]] = None,  # code → (boost, sector)
     ) -> list[CompositeSignal]:
         """여러 종목 일괄 시그널 생성"""
         if news_scores is None:
             news_scores = {}
+        if policy_boosts is None:
+            policy_boosts = {}
         signals = []
         for tech in tech_signals:
             ns, nr = news_scores.get(tech.code, (50.0, []))
-            sig = self.generate_signal(tech, market, ns, nr)
+            pb, sec = policy_boosts.get(tech.code, (0.0, ""))
+            sig = self.generate_signal(tech, market, ns, nr, pb, sec)
             signals.append(sig)
         signals.sort(key=lambda s: s.weighted_score, reverse=True)
         return signals

@@ -190,6 +190,12 @@ def api_news():
     return jsonify(_read(DATA_DIR / "news_summary.json", {}))
 
 
+@app.route("/api/policy")
+def api_policy():
+    """정책 모니터 — policy_monitor.json (화/목 국무회의·대수보회의 후 수동 업데이트)"""
+    return jsonify(_read(DATA_DIR / "policy_monitor.json", {}))
+
+
 @app.route("/api/status")
 def api_status():
     port_data = _read(DATA_STORE / "portfolio.json", {})

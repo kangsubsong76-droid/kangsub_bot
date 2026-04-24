@@ -723,6 +723,7 @@ class MainEngine:
              "rsi": s.rsi,
              "technical_score": s.technical_score, "market_score": s.market_score,
              "news_score": s.news_score, "weighted_score": s.weighted_score,
+             "policy_score": s.policy_score, "sector": s.sector,
              "reasons": s.reasons}
             for s in signals
         ], ensure_ascii=False, indent=2), encoding='utf-8')
@@ -1687,8 +1688,24 @@ class MainEngine:
             if i % 10 == 0:
                 log.info(f"[signal] OHLCV 진행: {i}/{len(codes)}")
 
+        # 정책 부스트 로드 (policy_monitor.json)
+        policy_boosts = {}  # code → (boost, sector)
+        try:
+            pm_path = DATA_DIR / "policy_monitor.json"
+            if pm_path.exists():
+                import json as _json
+                pm = _json.loads(pm_path.read_text(encoding="utf-8"))
+                sector_boost = pm.get("sector_boost", {})
+                for code in codes:
+                    sec = self._get_sector(code)
+                    if sec and sec in sector_boost:
+                        policy_boosts[code] = (float(sector_boost[sec]), sec)
+                log.info(f"[signal] 정책 부스트 로드: {len(policy_boosts)}종목 ({pm.get('updated','-')})")
+        except Exception as e:
+            log.warning(f"[signal] policy_monitor.json 로드 실패: {e}")
+
         log.info(f"[signal] 시그널 생성: {len(tech_signals)}종목 분석 완료")
-        signals = self.signal_engine.generate_batch_signals(tech_signals, market, news_scores)
+        signals = self.signal_engine.generate_batch_signals(tech_signals, market, news_scores, policy_boosts)
         # 종가 & RSI 주입 (signals.json 표시용)
         for s in signals:
             s.close_price = close_prices.get(s.code, 0.0)
