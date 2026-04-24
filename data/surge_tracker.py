@@ -105,7 +105,7 @@ def _fetch_kiwoom(top_n: int = 50) -> list | None:
     if not kiwoom:
         return None
     try:
-        rows = kiwoom.get_surge_ranking(market="0", top_n=top_n)
+        rows = kiwoom.get_surge_ranking(market="000", top_n=top_n)  # 000=전체(공식 포맷)
         if not rows:
             log.debug("ka10027 응답 비어있음 — pykrx 폴백")
             return None

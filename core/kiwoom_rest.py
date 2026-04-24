@@ -20,6 +20,8 @@
   kt00004  계좌평가현황요청      POST /api/dostk/acnt  (보유종목+현금, stk_acnt_evlt_prst 리스트)
   ka10001  주식기본정보          POST /api/dostk/stkinfo
   ka10002  주식거래원요청        POST /api/dostk/stkinfo
+  ka10027  전일대비등락률상위    POST /api/dostk/rkinfo  (mrkt_tp: 000/001/101)
+  ka10028  시가대비등락률        POST /api/dostk/stkinfo
   ka10081  주식일봉차트          POST /api/dostk/chart
   ka10008  업종일봉차트          POST /api/dostk/chart  (001=KOSPI, 101=KOSDAQ)
   ka10075  미체결요청            POST /api/dostk/acnt
@@ -531,18 +533,48 @@ class KiwoomRestAPI:
         return data
 
     # ════════════════════════════════════════════════════════
+    # ── 주식 정정주문 (kt10002)
+    # ════════════════════════════════════════════════════════
+    def modify_order(self, orig_ord_no: str, code: str, qty: int, price: int) -> dict | None:
+        """
+        주식 정정주문 (kt10002)
+        URL: /api/dostk/ordr  api-id: kt10002
+        공식 문서 p.427 기준 필수 필드:
+          dmst_stex_tp, orig_ord_no, stk_cd, mdfy_qty, mdfy_uv, mdfy_cond_uv
+        Response: ord_no, base_orig_ord_no, mdfy_qty, dmst_stex_tp
+        """
+        body = {
+            "dmst_stex_tp": "KRX",
+            "orig_ord_no":  orig_ord_no,
+            "stk_cd":       code.zfill(6),
+            "mdfy_qty":     str(qty),
+            "mdfy_uv":      str(price),
+            "mdfy_cond_uv": "",
+        }
+        data = self._post("/api/dostk/ordr", body, "kt10002")
+        if data and data.get("return_code") == 0:
+            log.info(f"주문정정 완료: 원주문번호={orig_ord_no} → 새주문번호={data.get('ord_no')}, 정정수량={qty}, 정정가={price:,}원")
+        else:
+            log.error(f"주문정정 실패: {orig_ord_no} — {data.get('return_msg') if data else '응답없음'}")
+        return data
+
+    # ════════════════════════════════════════════════════════
     # ── 주식 취소주문 (kt10003)
     # ════════════════════════════════════════════════════════
     def cancel_order(self, orig_ord_no: str, code: str, qty: int = 0) -> dict | None:
         """
         주식 취소주문 (kt10003)
+        URL: /api/dostk/ordr  api-id: kt10003
+        공식 문서 p.429 기준 필수 필드:
+          dmst_stex_tp, orig_ord_no, stk_cd, cncl_qty
         qty=0 → '0' 입력 시 잔량 전부 취소
+        Response: ord_no, base_orig_ord_no, cncl_qty
         """
         body = {
             "dmst_stex_tp": "KRX",
-            "orig_ord_no": orig_ord_no,
-            "stk_cd":      code.zfill(6),
-            "cncl_qty":    "0" if qty == 0 else str(qty),
+            "orig_ord_no":  orig_ord_no,
+            "stk_cd":       code.zfill(6),
+            "cncl_qty":     "0" if qty == 0 else str(qty),
         }
         data = self._post("/api/dostk/ordr", body, "kt10003")
         if data and data.get("return_code") == 0:
@@ -653,86 +685,75 @@ class KiwoomRestAPI:
         return df.tail(days)
 
     # ════════════════════════════════════════════════════════
-    # ── 급상승 순위 조회 (ka10027) — 주식등락률순위
+    # ── 급상승 순위 조회 (ka10027) — 전일대비등락률상위요청
     # ════════════════════════════════════════════════════════
-    def get_surge_ranking(self, market: str = "0", top_n: int = 50) -> list:
+    def get_surge_ranking(self, market: str = "000", top_n: int = 50) -> list:
         """
-        주식등락률순위 (ka10027)
-        market: "0"=전체, "1"=KOSPI, "2"=KOSDAQ
-        top_n : 반환할 최대 종목 수 (API는 보통 100건 단위 연속조회)
-        반환  : [{"rank", "code", "name", "price", "change_rate", "volume", "market"}, ...]
+        전일대비등락률상위요청 (ka10027)
+        URL    : /api/dostk/rkinfo  (공식 문서 p.87 확인)
+        market : "000"=전체, "001"=코스피, "101"=코스닥
+        top_n  : 반환할 최대 종목 수
+        반환   : [{"rank", "code", "name", "price", "change_rate", "volume"}, ...]
+
+        필수 Request 필드 (p.87 기준):
+          mrkt_tp, sort_tp, trde_qty_cnd, stk_cnd, crd_cnd,
+          updown_incls, pric_cnd, trde_prica_cnd, stex_tp
+        Response 리스트 키: pred_pre_flu_rt_upper
+        flu_rt 필드에 부호 이미 포함 (예: "+29.86", "-6.98")
         """
         body = {
-            "mrkt_tp":    market,   # 시장구분 (0=전체)
-            "sort_tp":    "1",      # 정렬기준 (1=등락률순)
-            "trde_qty_tp":"0",      # 거래량구분 (0=전체)
-            "stk_cnd":    "0",      # 종목조건 (0=전체)
-            "upjong_cd":  "",       # 업종코드 (전체)
+            "mrkt_tp":        market,   # 000=전체, 001=코스피, 101=코스닥
+            "sort_tp":        "1",      # 1=상승률순
+            "trde_qty_cnd":   "0000",   # 0000=전체조회
+            "stk_cnd":        "0",      # 0=전체조회
+            "crd_cnd":        "0",      # 0=전체조회
+            "updown_incls":   "1",      # 1=상하한 포함
+            "pric_cnd":       "0",      # 0=전체조회
+            "trde_prica_cnd": "0",      # 0=전체조회
+            "stex_tp":        "3",      # 3=통합(KRX+NXT)
         }
-        data = self._post("/api/dostk/rank", body, "ka10027")
+        data = self._post("/api/dostk/rkinfo", body, "ka10027")
         if not data or data.get("return_code") != 0:
             log.debug(f"ka10027 조회 실패: {data.get('return_msg') if data else 'None'}")
             return []
 
-        # 응답 리스트 필드명 후보 (실제 응답 확인 후 자동 매핑)
-        row_list = None
-        for key in ("stk_errt_stts_qry", "stk_rank_list", "output", "list", "data"):
-            candidate = data.get(key)
-            if isinstance(candidate, list) and candidate:
-                row_list = candidate
-                break
-
-        if not row_list:
-            # 응답 최상위에 리스트가 직접 있는 경우 대응
-            for v in data.values():
-                if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
-                    row_list = v
-                    break
-
-        if not row_list:
-            log.debug(f"ka10027 리스트 필드 미발견. 응답 키: {list(data.keys())}")
+        # 공식 응답 키: pred_pre_flu_rt_upper (p.88 확인)
+        row_list = data.get("pred_pre_flu_rt_upper", [])
+        if not isinstance(row_list, list) or not row_list:
+            log.debug(f"ka10027 빈 응답. 키 목록: {list(data.keys())}")
             return []
-
-        def _safe_float(row, *keys):
-            for k in keys:
-                try:
-                    v = str(row.get(k, "")).replace(",", "").replace("+", "").replace("%", "")
-                    f = float(v)
-                    if f != 0:
-                        return f
-                except Exception:
-                    continue
-            return 0.0
-
-        def _safe_int(row, *keys):
-            for k in keys:
-                try:
-                    v = str(row.get(k, "")).replace(",", "")
-                    return abs(int(float(v)))
-                except Exception:
-                    continue
-            return 0
 
         results = []
         for i, r in enumerate(row_list[:top_n], 1):
-            # 등락부호 처리 (flu_smbol: 1=상한, 2=상승, 4=하한, 5=하락)
-            flu_smbol = str(r.get("flu_smbol", "2"))
-            rate = _safe_float(r, "flu_rt", "chg_rt", "change_rate", "errt_rt")
-            if flu_smbol in ("4", "5"):
-                rate = -abs(rate)
+            # flu_rt는 이미 부호 포함: "+29.86" → 29.86, "-6.98" → -6.98
+            try:
+                rate = float(str(r.get("flu_rt", "0")).replace(",", ""))
+            except Exception:
+                rate = 0.0
 
-            # 시장구분 (mrkt_tp: 1=KOSPI, 2=KOSDAQ, 기타=기타)
-            mkt_code = str(r.get("mrkt_tp", r.get("mkt_tp", "")))
-            mkt_name = {"1": "KOSPI", "2": "KOSDAQ"}.get(mkt_code, "")
+            # cur_prc도 부호 포함 → abs()로 실제 가격
+            try:
+                price = abs(int(float(str(r.get("cur_prc", "0")).replace(",", ""))))
+            except Exception:
+                price = 0
+
+            # now_trde_qty: 현재거래량
+            try:
+                volume = abs(int(float(str(r.get("now_trde_qty", "0")).replace(",", ""))))
+            except Exception:
+                volume = 0
+
+            # stk_cd: "005930" 형식 (kt00004와 달리 "A" 접두어 없음)
+            code = str(r.get("stk_cd", "")).lstrip("A").zfill(6)
 
             results.append({
                 "rank":        i,
-                "code":        str(r.get("stk_cd", r.get("code", ""))).zfill(6),
-                "name":        r.get("stk_nm", r.get("name", "")),
-                "price":       _safe_int(r, "cur_prc", "close_pric", "price"),
+                "code":        code,
+                "name":        r.get("stk_nm", ""),
+                "price":       price,
                 "change_rate": round(rate, 2),
-                "volume":      _safe_int(r, "trde_qty", "acml_vol", "volume"),
-                "market":      mkt_name,
+                "volume":      volume,
+                "market":      "",   # ka10027 응답에 시장구분 필드 없음
             })
 
         log.info(f"ka10027 급상승 Top{len(results)} 수신 완료")
