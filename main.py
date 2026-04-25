@@ -138,9 +138,8 @@ class MainEngine:
     def collect_news(self):
         log.info("[07:00] 뉴스 크롤링 시작")
         alog.info("📰 뉴스 크롤링 시작")
-        codes = list(get_unique_codes())[:10]
-        self._cached_news = self.news_analyzer.collect_all_news(codes)
-        self._cached_news = self.news_analyzer.process_news(self._cached_news)
+        codes = list(get_unique_codes())
+        self._cached_news = self.news_analyzer.run_pipeline(codes)
         log.info(f"뉴스 {len(self._cached_news)}건 수집 완료")
         alog.info(f"📰 뉴스 {len(self._cached_news)}건 수집 · 분석 완료")
         for news in self._cached_news[:5]:
