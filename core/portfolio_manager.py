@@ -106,6 +106,8 @@ class PortfolioManager:
         self.cash -= cost
         log.info(f"매수: {name} {qty}주 @ {price:,.0f}원 (잔고 {self.cash:,.0f}원)")
         self._save()
+        self._record_trade("매수", code, name, qty, price, pnl=0)
+        self._sync_manual_add(code, name, category, sector, price, qty)
 
     def remove_holding(self, code: str, qty: int = None, price: float = 0):
         if code not in self.holdings:
@@ -116,13 +118,17 @@ class PortfolioManager:
         proceeds = price * sell_qty
         self.cash += proceeds
         pnl = (price - h.avg_price) * sell_qty
-        log.info(f"매도: {h.name} {sell_qty}주 @ {price:,.0f}원 (손익 {pnl:+,.0f}원)")
+        name = h.name
+        avg  = h.avg_price
+        log.info(f"매도: {name} {sell_qty}주 @ {price:,.0f}원 (손익 {pnl:+,.0f}원)")
 
         h.quantity -= sell_qty
         if h.quantity <= 0:
             del self.holdings[code]
         self._save()
-        return {"pnl": pnl, "pnl_pct": pnl / (h.avg_price * sell_qty) if h.avg_price else 0}
+        self._record_trade("매도", code, name, sell_qty, price, pnl=pnl)
+        self._sync_manual_remove(code)
+        return {"pnl": pnl, "pnl_pct": pnl / (avg * sell_qty) if avg else 0}
 
     def update_prices(self, prices: dict[str, float]):
         """실시간 가격 업데이트"""
@@ -185,6 +191,102 @@ class PortfolioManager:
                 for h in self.holdings.values()
             ],
         }
+
+    # === 체결 기록 & 수동파일 동기화 ===
+
+    def _record_trade(self, side: str, code: str, name: str, qty: int,
+                      price: float, pnl: float = 0, trigger: str = ""):
+        """체결 내역을 data/trades.json 에 append (대시보드 매매 내역 표시용)"""
+        # trades.json 은 data/ 직하 (data/store 아님) — server.py 와 경로 일치
+        trades_path = DATA_DIR.parent / "trades.json"
+        trades: list = []
+        if trades_path.exists():
+            try:
+                trades = json.loads(trades_path.read_text(encoding="utf-8-sig"))
+            except Exception:
+                trades = []
+        now = datetime.now()
+        trades.append({
+            "timestamp":  now.isoformat(),
+            "date":       now.strftime("%Y-%m-%d"),
+            "side":       side,
+            "code":       code,
+            "name":       name,
+            "qty":        qty,
+            "price":      round(price),
+            "amount":     round(price * qty),
+            "pnl":        round(pnl),
+            "trigger":    trigger,
+        })
+        if len(trades) > 500:
+            trades = trades[-500:]
+        try:
+            trades_path.write_text(
+                json.dumps(trades, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except Exception as e:
+            log.error(f"trades.json 저장 실패: {e}")
+
+    def _sync_manual_remove(self, code: str):
+        """매도 후 portfolio_manual.json 에서 해당 종목 제거 + 현금 갱신"""
+        manual_path = DATA_DIR / "portfolio_manual.json"
+        if not manual_path.exists():
+            return
+        try:
+            manual = json.loads(manual_path.read_text(encoding="utf-8-sig"))
+            before = len(manual.get("holdings", []))
+            manual["holdings"] = [
+                h for h in manual.get("holdings", [])
+                if h.get("code") != code
+            ]
+            manual["cash"] = round(self.cash)
+            manual["updated_at"] = datetime.now().isoformat()
+            manual_path.write_text(
+                json.dumps(manual, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            removed = before - len(manual["holdings"])
+            if removed:
+                log.info(f"portfolio_manual.json 매도 반영: {code} 제거 (잔고 {self.cash:,.0f}원)")
+        except Exception as e:
+            log.error(f"portfolio_manual.json 매도 동기화 실패: {e}")
+
+    def _sync_manual_add(self, code: str, name: str, category: str, sector: str,
+                         price: float, qty: int):
+        """매수 후 portfolio_manual.json 에 종목 추가/업데이트 + 현금 갱신"""
+        manual_path = DATA_DIR / "portfolio_manual.json"
+        if not manual_path.exists():
+            return
+        try:
+            manual = json.loads(manual_path.read_text(encoding="utf-8-sig"))
+            holdings = manual.get("holdings", [])
+            existing = next((h for h in holdings if h.get("code") == code), None)
+            if existing:
+                # 평균단가 재계산
+                h_ref = self.holdings.get(code)
+                existing["qty"]           = h_ref.quantity if h_ref else qty
+                existing["avg_price"]     = round(h_ref.avg_price if h_ref else price)
+                existing["current_price"] = round(price)
+            else:
+                holdings.append({
+                    "code":          code,
+                    "name":          name,
+                    "qty":           qty,
+                    "avg_price":     round(price),
+                    "current_price": round(price),
+                    "category":      category,
+                    "sector":        sector,
+                    "buy_dates":     [datetime.now().isoformat()],
+                    "split_stage":   1,
+                })
+            manual["holdings"]   = holdings
+            manual["cash"]       = round(self.cash)
+            manual["updated_at"] = datetime.now().isoformat()
+            manual_path.write_text(
+                json.dumps(manual, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            log.info(f"portfolio_manual.json 매수 반영: {name}({code}) {qty}주 추가")
+        except Exception as e:
+            log.error(f"portfolio_manual.json 매수 동기화 실패: {e}")
 
     # === 영속화 ===
 
