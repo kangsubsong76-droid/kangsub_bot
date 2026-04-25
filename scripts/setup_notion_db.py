@@ -27,7 +27,7 @@ print(f"부모 페이지 발견: {parent_id}")
 def create_db(title: str, properties: dict) -> str:
     """DB 생성 후 ID 반환"""
     db = client.databases.create(
-        parent={"page_id": parent_id},
+        parent={"type": "page_id", "page_id": parent_id},
         title=[{"type": "text", "text": {"content": title}}],
         properties=properties,
     )
