@@ -354,105 +354,141 @@ tr:hover td { background: rgba(58,142,255,.05); }
 .result-top { display: flex; justify-content: space-between; font-size: 11px; }
 .result-sub { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 1px; }
 
-/* ══ 모바일 가로 최적화 (max-width: 1024px) ═══════════ */
+/* ══ 모바일 가로(landscape) 최적화 ══════════════════════
+   타겟: 폰/소형태블릿 가로 모드 (max-width 1024px)
+   핵심 전략: body 스크롤 + #main position:relative
+   → iOS Safari / Android 크롬 모두 안정적으로 동작
+═══════════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
   :root { --hdr: 42px; }
 
-  /* ── 헤더 축소 ──────────────────────────────────── */
-  .hdr-brand { min-width: 96px; padding: 0 10px; gap: 5px; }
-  .brand-name { font-size: 12px; letter-spacing: .8px; }
+  /* ── 스크롤 컨테이너: body ──────────────────────── */
+  html {
+    height: 100%;
+    overflow: hidden; /* html은 고정, body가 스크롤 */
+  }
+  body {
+    height: 100%;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch; /* iOS 관성 스크롤 */
+  }
+
+  /* ── 헤더: 42px 고정, 콤팩트 ───────────────────── */
+  #hdr { overflow: hidden; }
+  .hdr-brand  { min-width: 90px; padding: 0 10px; gap: 5px; }
+  .brand-name { font-size: 12px; letter-spacing: .6px; }
   .brand-sub, .live-badge { display: none; }
-  .ref-wrap { display: none; }
-  .hdr-right { padding: 0 8px; }
-  #clock { font-size: 13px; letter-spacing: .3px; }
+  .ref-wrap   { display: none; }
+  .hdr-right  { padding: 0 8px; }
+  #clock      { font-size: 13px; letter-spacing: .2px; }
   #clock-date { display: none; }
   .activity-ticker { display: none; }
-  /* MI 폭 축소 */
-  .mi { min-width: 60px; padding: 0 6px; }
-  .mi-val { font-size: 11px; }
-  .mi-chg { font-size: 9px; }
-  .mi-lbl { font-size: 8px; }
-  /* 모바일에서 숨길 지표: S&P500, WTI, Gold, US10Y, 시스템 */
+  /* 헤더 지표: KOSPI·KOSDAQ·USD·VIX 4개만 표시 */
+  .mi         { min-width: 58px; padding: 0 6px; }
+  .mi-val     { font-size: 12px; }
+  .mi-chg     { font-size: 9px; }
+  .mi-lbl     { font-size: 8px; }
   #mi-sp, #mi-wti, #mi-gold, #mi-us10y, #mi-syst { display: none; }
 
-  /* ── 메인: 스크롤 가능한 2열 그리드 ─────────────── */
+  /* ── 메인 그리드: relative + body 스크롤 ────────── */
   #main {
-    position: fixed !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch;
+    position: relative !important;
+    top: 0 !important; bottom: auto !important;
+    left: 0 !important; right: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin-top: var(--hdr);
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     grid-template-rows: auto !important;
     gap: 3px !important;
-    padding: 3px !important;
+    padding: 3px 3px 20px !important; /* 하단 여백으로 내비버튼 가림 방지 */
   }
 
-  /* ── 패널 재배치 (우선순위 순) ──────────────────── */
-  /* 1위: 포트폴리오 — 전체너비, 상단 고정 */
-  #pnl-port  { grid-column: 1/3 !important; grid-row: 1 !important; min-height: 230px; }
-  /* 2위: NXT | 봇로그 — 나란히 */
-  #pnl-nxt   { grid-column: 1   !important; grid-row: 2 !important; min-height: 200px; }
-  #pnl-log   { grid-column: 2   !important; grid-row: 2 !important; min-height: 200px; }
-  /* 3위: 매매계획+결과 — 전체너비 */
-  #pnl-day   { grid-column: 1/3 !important; grid-row: 3 !important; min-height: 170px; }
-  /* 4위: 시장분석 | 시간외 */
-  #pnl-mkt   { grid-column: 1   !important; grid-row: 4 !important; min-height: 190px; }
-  #pnl-after { grid-column: 2   !important; grid-row: 4 !important; min-height: 190px; }
-  /* 5위: 브리핑 | 스케줄러 */
-  #pnl-brief { grid-column: 1   !important; grid-row: 5 !important; min-height: 170px; }
-  #pnl-sched { grid-column: 2   !important; grid-row: 5 !important; min-height: 170px; }
+  /* ── 패널 재배치 — 중요도 순 ─────────────────────
+     Row 1: 포트폴리오 (전체)
+     Row 2: NXT | 봇로그
+     Row 3: 매매계획+결과 (전체)
+     Row 4: 시장분석 | 시간외
+     Row 5: 브리핑 | 스케줄러
+  ────────────────────────────────────────────────── */
+  #pnl-port  { grid-column: 1/3 !important; grid-row: 1 !important; height: 220px; }
+  #pnl-nxt   { grid-column: 1   !important; grid-row: 2 !important; height: 210px; }
+  #pnl-log   { grid-column: 2   !important; grid-row: 2 !important; height: 210px; }
+  #pnl-day   { grid-column: 1/3 !important; grid-row: 3 !important; height: 180px; }
+  #pnl-mkt   { grid-column: 1   !important; grid-row: 4 !important; height: 200px; }
+  #pnl-after { grid-column: 2   !important; grid-row: 4 !important; height: 200px; }
+  #pnl-brief { grid-column: 1   !important; grid-row: 5 !important; height: 185px; }
+  #pnl-sched { grid-column: 2   !important; grid-row: 5 !important; height: 185px; }
 
-  /* ── 패널 내부 조정 ─────────────────────────────── */
-  /* 포트폴리오 stat 카드 폰트 */
-  .scard .val { font-size: 13px; }
+  /* 패널 공통: height 지정하므로 내부 스크롤 유지 */
+  .pnl { overflow: hidden; }
+
+  /* ── 패널 헤더/바디 축소 ───────────────────────── */
+  .pnl-hd     { padding: 5px 10px; font-size: 11px; }
+  .pnl-hd .ico { font-size: 11px; }
+  .pnl-bd     { padding: 5px 8px; }
+  .badge      { padding: 1px 5px; font-size: 9px; }
+
+  /* ── 테이블 ─────────────────────────────────────── */
+  th { font-size: 10px; padding: 3px 4px; }
+  td { font-size: 11px; padding: 3px 4px; }
+
+  /* ── 포트폴리오 ─────────────────────────────────── */
+  .scard      { padding: 5px 7px; }
   .scard .lbl { font-size: 10px; }
+  .scard .val { font-size: 13px; }
+  .scard .sub { font-size: 10px; }
 
-  /* NXT 테이블: 좁은 화면에서 일부 열 숨김 */
-  #pnl-nxt table th:nth-child(5),
-  #pnl-nxt table td:nth-child(5),
-  #pnl-nxt table th:nth-child(6),
-  #pnl-nxt table td:nth-child(6) { display: none; }
+  /* ── NXT: 좁은 칸에서 갭존·거래량 열 숨김 ────────── */
+  #pnl-nxt th:nth-child(5), #pnl-nxt td:nth-child(5),
+  #pnl-nxt th:nth-child(6), #pnl-nxt td:nth-child(6) { display: none; }
+  .rk { font-size: 13px; }
 
-  /* 봇로그 폰트 */
-  .log-entry { font-size: 10.5px; }
-  .log-time  { font-size: 9.5px; }
+  /* ── 봇 로그 ─────────────────────────────────────── */
+  .log-entry  { font-size: 10px; gap: 4px; }
+  .log-time   { font-size: 9px; }
+  #log-feed   { padding: 4px 8px; }
 
-  /* 매매계획 하단 그리드: 2열 유지, 내부 day-body는 단열로 */
-  .bottom-grid { grid-template-columns: 1fr 1fr; }
+  /* ── 매매계획+결과 ──────────────────────────────── */
+  .bottom-grid { grid-template-columns: 1fr 1fr; height: 100%; }
+  .day-hd      { padding: 4px 10px; font-size: 10px; }
+  /* 내부 plan/result를 단열로: 계획만 보이게 (좁은 높이) */
   .day-body    { grid-template-columns: 1fr !important; overflow-y: auto; }
-  .day-hd      { padding: 4px 10px; }
+  .day-sect    { padding: 4px 8px; }
+  .sect-lbl    { font-size: 8px; }
 
-  /* 브리핑 패널: 3개 섹션을 세로 스택으로 */
+  /* ── 브리핑: 3섹션 세로 스택 ─────────────────────── */
   #pnl-brief .pnl-bd {
     flex-direction: column !important;
-    gap: 5px !important;
+    gap: 4px !important;
+    overflow-y: auto;
   }
   #pnl-brief .pnl-bd > div {
     border-right: none !important;
     border-bottom: 1px solid var(--border);
     padding-right: 0 !important;
-    padding-bottom: 5px;
-    max-height: 80px;
-    overflow-y: auto;
+    padding-bottom: 4px;
+    flex: 0 0 auto;
   }
   #pnl-brief .pnl-bd > div:last-child { border-bottom: none; }
 
-  /* 패널 헤더 축소 */
-  .pnl-hd { padding: 5px 10px; font-size: 11px; }
-  .pnl-hd .ico { font-size: 11px; }
-  .pnl-bd { padding: 6px 8px; }
-
-  /* 테이블 폰트 */
-  th { font-size: 10px; padding: 3px 4px; }
-  td { font-size: 11px; padding: 4px 4px; }
-
-  /* 스케줄러 */
+  /* ── 스케줄러 ───────────────────────────────────── */
+  .srow      { padding: 4px 0; gap: 5px; }
   .srow-name { font-size: 10px; }
   .srow-time { font-size: 9px; }
+  .srow-st   { font-size: 9px; }
 
-  /* 내비 버튼 위치 조정 */
-  .nav-float { bottom: 10px; right: 10px; }
-  .nav-btn   { padding: 6px 12px; font-size: 11px; }
+  /* ── 시간외 ─────────────────────────────────────── */
+  .arow-name { font-size: 10px; }
+  .arow-chg  { font-size: 10px; min-width: 42px; }
+  .arow-vol  { display: none; } /* 모바일에서 거래량 숨김 */
+
+  /* ── 내비 버튼 ──────────────────────────────────── */
+  .nav-float { bottom: 8px; right: 8px; }
+  .nav-btn   { padding: 6px 11px; font-size: 11px; }
 }
 </style>
 </head>
