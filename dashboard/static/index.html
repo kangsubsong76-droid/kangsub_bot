@@ -620,10 +620,10 @@ tr:hover td { background: rgba(58,142,255,.05); }
         오늘의 시그널 <span id="sig-cnt" style="color:var(--blue)">0</span>건
       </div>
       <table>
-        <colgroup><col><col style="width:60px"><col style="width:36px"><col style="width:42px"></colgroup>
+        <colgroup><col><col style="width:70px"><col style="width:46px"><col style="width:42px"></colgroup>
         <thead><tr><th>종목 / 시그널 근거</th><th class="r">현재가</th><th class="r">RSI</th><th class="r">점수</th></tr></thead>
         <tbody id="sig-tbody">
-          <tr><td colspan="3"><div class="empty">시그널 없음</div></td></tr>
+          <tr><td colspan="4"><div class="empty">시그널 없음</div></td></tr>
         </tbody>
       </table>
     </div>
@@ -989,43 +989,95 @@ async function loadSignals() {
   document.getElementById('sig-cnt').textContent = sigs.length;
   const tbody = document.getElementById('sig-tbody');
   if (!sigs.length) {
-    tbody.innerHTML = '<tr><td colspan="3"><div class="empty">시그널 없음</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4"><div class="empty">시그널 없음</div></td></tr>';
     return;
   }
-  tbody.innerHTML = sigs.slice(0, 6).map(s => {
-    const reasons    = Array.isArray(s.reasons) ? s.reasons : (s.reasons ? [s.reasons] : []);
-    const score      = s.weighted_score ?? s.score;
-    const ts         = s.technical_score != null ? Number(s.technical_score).toFixed(0) : null;
-    const ns         = s.news_score != null ? Number(s.news_score).toFixed(0) : null;
-    const action     = s.action ?? '';
-    const closePrice = s.close_price ?? s.close ?? null;
-    const rsi        = s.rsi ?? null;
-    const acColor    = action==='BUY' ? 'var(--up)' : action==='SELL' ? 'var(--down)' : action==='WATCH' ? 'var(--gold)' : 'var(--muted)';
-    // reasons[0] = 액션 레이블, reasons[1..] = 세부 근거
-    const mainLabel  = reasons[0] ?? action;
-    const details    = reasons.slice(1, 4); // 최대 3개 세부 근거
+
+  // 액션별 스타일
+  const AST = {
+    BUY:  { bg:'rgba(0,204,118,.15)',  bd:'rgba(0,204,118,.45)',  tx:'var(--up)',     lbl:'BUY'  },
+    SELL: { bg:'rgba(255,63,94,.15)',  bd:'rgba(255,63,94,.45)',  tx:'var(--down)',   lbl:'SELL' },
+    WATCH:{ bg:'rgba(240,165,0,.13)',  bd:'rgba(240,165,0,.45)',  tx:'var(--mid)',    lbl:'WATCH'},
+    HOLD: { bg:'rgba(90,112,144,.1)',  bd:'rgba(90,112,144,.35)', tx:'var(--muted)', lbl:'HOLD' },
+  };
+
+  // 근거 칩: 내용에 따라 색상 자동 분류
+  function chip(r) {
+    let bg='rgba(58,142,255,.08)', bd='rgba(58,142,255,.2)', tx='var(--muted)';
+    if (/과매도|골든크로스|하단|상승추세|매수 근접/.test(r))
+      { bg='rgba(0,204,118,.09)'; bd='rgba(0,204,118,.3)'; tx='#7dd9a0'; }
+    else if (/과매수|데드크로스|하락추세|역풍|⚠/.test(r))
+      { bg='rgba(255,63,94,.09)';  bd='rgba(255,63,94,.3)';  tx='var(--down)'; }
+    else if (/🏛️|정책수혜/.test(r))
+      { bg='rgba(155,122,255,.12)'; bd='rgba(155,122,255,.35)'; tx='var(--purple)'; }
+    else if (/거래량/.test(r))
+      { bg='rgba(0,212,255,.09)';  bd='rgba(0,212,255,.3)';  tx='var(--cyan)'; }
+    return `<span style="display:inline-block;font-size:10px;padding:1px 6px;border-radius:2px;margin:1px 2px 1px 0;background:${bg};border:1px solid ${bd};color:${tx};white-space:nowrap">${r}</span>`;
+  }
+
+  tbody.innerHTML = sigs.slice(0, 8).map(s => {
+    const reasons = Array.isArray(s.reasons) ? s.reasons : [];
+    const score   = s.weighted_score ?? s.score;
+    const ts      = s.technical_score != null ? Number(s.technical_score).toFixed(0) : null;
+    const ms      = s.market_score    != null ? Number(s.market_score).toFixed(0)    : null;
+    const ns      = s.news_score      != null ? Number(s.news_score).toFixed(0)      : null;
+    const ps      = s.policy_score;
+    const action  = s.action ?? 'HOLD';
+    const ast     = AST[action] ?? AST.HOLD;
+
+    // close_price / rsi: 0 또는 null → '--'
+    const closeRaw = s.close_price ?? s.close ?? 0;
+    const rsiRaw   = s.rsi ?? 0;
+    const closePrice = closeRaw > 0 ? closeRaw : null;
+    const rsi        = rsiRaw  > 0 ? rsiRaw  : null;
+
+    // reasons[0] = 점수 레이블, reasons[1:] = 세부근거 전체
+    const mainLabel = reasons[0] ?? action;
+    const details   = reasons.slice(1); // 제한 없이 전체 표시
+
     const detailHtml = details.length
-      ? `<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:3px">${
-          details.map(r => `<span style="font-size:10px;padding:1px 5px;border-radius:2px;background:rgba(58,142,255,.08);border:1px solid rgba(58,142,255,.2);color:var(--muted);white-space:nowrap">${r}</span>`).join('')
-        }</div>` : '';
-    // RSI 색상: 과매도(<30)=초록, 과매수(>70)=빨강, 중립=회색
-    const rsiColor   = rsi == null ? 'var(--muted)' : rsi < 30 ? 'var(--up)' : rsi > 70 ? 'var(--down)' : 'var(--text)';
+      ? `<div style="margin-top:4px;line-height:1.9">${details.map(chip).join('')}</div>`
+      : '';
+
+    // 점수 분해 (기술/시장/뉴스/정책)
+    const bdParts = [];
+    if (ts != null) bdParts.push(`기술 <b style="color:var(--text)">${ts}</b>`);
+    if (ms != null) bdParts.push(`시장 <b style="color:var(--text)">${ms}</b>`);
+    if (ns != null) bdParts.push(`뉴스 <b style="color:var(--text)">${ns}</b>`);
+    const psBit = ps && Math.abs(ps) >= 1
+      ? ` · 정책 <b style="color:${ps>0?'var(--up)':'var(--down)'}">${ps>0?'+':''}${Number(ps).toFixed(0)}</b>` : '';
+    const bdHtml = bdParts.length
+      ? `<div style="margin-top:4px;font-size:9px;color:var(--muted)">${bdParts.join(' · ')}${psBit}</div>`
+      : '';
+
+    // 액션 뱃지
+    const badge = `<span style="margin-left:5px;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;background:${ast.bg};border:1px solid ${ast.bd};color:${ast.tx}">${ast.lbl}</span>`;
+
+    // RSI 색상 + 상태 레이블
+    const rsiColor = rsi == null ? 'var(--muted)' : rsi < 30 ? 'var(--up)' : rsi > 70 ? 'var(--down)' : 'var(--text)';
+    const rsiLbl   = rsi == null ? '' : rsi < 30 ? '과매도' : rsi > 70 ? '과매수' : rsi < 45 ? '근접' : '';
+    const rsiHtml  = rsi != null
+      ? `<div style="font-size:12px;font-weight:700;color:${rsiColor}">${Number(rsi).toFixed(1)}</div>
+         ${rsiLbl ? `<div style="font-size:8px;color:${rsiColor}">${rsiLbl}</div>` : ''}`
+      : `<span style="color:var(--muted)">--</span>`;
+
     return `<tr>
-      <td style="white-space:normal;padding:5px 5px 6px">
-        <div style="font-weight:700;font-size:12px">${s.name??s.code??'--'}</div>
-        <div style="font-size:11px;color:${acColor};margin-top:2px">${mainLabel}</div>
+      <td style="white-space:normal;padding:5px 5px 8px;min-width:0">
+        <div style="display:flex;align-items:center">
+          <span style="font-weight:700;font-size:12px">${s.name??s.code??'--'}</span>${badge}
+        </div>
+        <div style="font-size:11px;color:${ast.tx};margin-top:2px">${mainLabel}</div>
         ${detailHtml}
+        ${bdHtml}
       </td>
-      <td class="r" style="white-space:nowrap;vertical-align:top;padding-top:7px;font-size:11px">
+      <td class="r" style="white-space:nowrap;vertical-align:top;padding-top:6px;font-size:11px">
         ${closePrice != null ? W.format(Math.round(closePrice)) : '--'}
       </td>
-      <td class="r" style="white-space:nowrap;vertical-align:top;padding-top:7px;font-size:11px;color:${rsiColor};font-weight:700">
-        ${rsi != null ? Number(rsi).toFixed(1) : '--'}
+      <td class="r" style="white-space:nowrap;vertical-align:top;padding-top:6px">
+        ${rsiHtml}
       </td>
-      <td class="r ${cc(score??0)}" style="white-space:nowrap;vertical-align:top;padding-top:7px">
-        <div style="font-size:13px;font-weight:700">${score!=null ? Number(score).toFixed(0) : '--'}</div>
-        ${ts!=null&&ns!=null ? `<div style="font-size:10px;color:var(--muted)">기${ts}·뉴${ns}</div>` : ''}
-        ${s.policy_score && Math.abs(s.policy_score) >= 1 ? `<div style="font-size:9px;color:${s.policy_score>0?'var(--up)':'var(--down)'}">정책${s.policy_score>0?'+':''}${Number(s.policy_score).toFixed(0)}</div>` : ''}
+      <td class="r ${cc(score??0)}" style="white-space:nowrap;vertical-align:top;padding-top:6px">
+        <div style="font-size:14px;font-weight:700">${score!=null ? Number(score).toFixed(0) : '--'}</div>
       </td>
     </tr>`;
   }).join('');
