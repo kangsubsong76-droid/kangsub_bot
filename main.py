@@ -166,7 +166,7 @@ class MainEngine:
                 })
             pos = sum(1 for n in self._cached_news if n.sentiment > 0.1)
             neg = sum(1 for n in self._cached_news if n.sentiment < -0.1)
-            (DATA_DIR / "news_summary.json").write_text(
+            (DATA_DIR.parent / "news_summary.json").write_text(
                 json.dumps({
                     "updated":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "total":    len(self._cached_news),

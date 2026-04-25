@@ -984,8 +984,14 @@ async function loadPortfolio() {
 
 /* ── 시그널 ────────────────────────────────────────── */
 async function loadSignals() {
-  const sigs = await req('/api/signals');
+  let sigs = await req('/api/signals');
   if (!Array.isArray(sigs)) return;
+  // 점수 높은 순 정렬
+  sigs = sigs.slice().sort((a, b) => {
+    const sa = a.weighted_score ?? a.score ?? 0;
+    const sb = b.weighted_score ?? b.score ?? 0;
+    return sb - sa;
+  });
   document.getElementById('sig-cnt').textContent = sigs.length;
   const tbody = document.getElementById('sig-tbody');
   if (!sigs.length) {
