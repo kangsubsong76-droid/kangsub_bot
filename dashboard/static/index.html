@@ -353,6 +353,107 @@ tr:hover td { background: rgba(58,142,255,.05); }
 }
 .result-top { display: flex; justify-content: space-between; font-size: 11px; }
 .result-sub { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+/* ══ 모바일 가로 최적화 (max-width: 1024px) ═══════════ */
+@media (max-width: 1024px) {
+  :root { --hdr: 42px; }
+
+  /* ── 헤더 축소 ──────────────────────────────────── */
+  .hdr-brand { min-width: 96px; padding: 0 10px; gap: 5px; }
+  .brand-name { font-size: 12px; letter-spacing: .8px; }
+  .brand-sub, .live-badge { display: none; }
+  .ref-wrap { display: none; }
+  .hdr-right { padding: 0 8px; }
+  #clock { font-size: 13px; letter-spacing: .3px; }
+  #clock-date { display: none; }
+  .activity-ticker { display: none; }
+  /* MI 폭 축소 */
+  .mi { min-width: 60px; padding: 0 6px; }
+  .mi-val { font-size: 11px; }
+  .mi-chg { font-size: 9px; }
+  .mi-lbl { font-size: 8px; }
+  /* 모바일에서 숨길 지표: S&P500, WTI, Gold, US10Y, 시스템 */
+  #mi-sp, #mi-wti, #mi-gold, #mi-us10y, #mi-syst { display: none; }
+
+  /* ── 메인: 스크롤 가능한 2열 그리드 ─────────────── */
+  #main {
+    position: fixed !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: auto !important;
+    gap: 3px !important;
+    padding: 3px !important;
+  }
+
+  /* ── 패널 재배치 (우선순위 순) ──────────────────── */
+  /* 1위: 포트폴리오 — 전체너비, 상단 고정 */
+  #pnl-port  { grid-column: 1/3 !important; grid-row: 1 !important; min-height: 230px; }
+  /* 2위: NXT | 봇로그 — 나란히 */
+  #pnl-nxt   { grid-column: 1   !important; grid-row: 2 !important; min-height: 200px; }
+  #pnl-log   { grid-column: 2   !important; grid-row: 2 !important; min-height: 200px; }
+  /* 3위: 매매계획+결과 — 전체너비 */
+  #pnl-day   { grid-column: 1/3 !important; grid-row: 3 !important; min-height: 170px; }
+  /* 4위: 시장분석 | 시간외 */
+  #pnl-mkt   { grid-column: 1   !important; grid-row: 4 !important; min-height: 190px; }
+  #pnl-after { grid-column: 2   !important; grid-row: 4 !important; min-height: 190px; }
+  /* 5위: 브리핑 | 스케줄러 */
+  #pnl-brief { grid-column: 1   !important; grid-row: 5 !important; min-height: 170px; }
+  #pnl-sched { grid-column: 2   !important; grid-row: 5 !important; min-height: 170px; }
+
+  /* ── 패널 내부 조정 ─────────────────────────────── */
+  /* 포트폴리오 stat 카드 폰트 */
+  .scard .val { font-size: 13px; }
+  .scard .lbl { font-size: 10px; }
+
+  /* NXT 테이블: 좁은 화면에서 일부 열 숨김 */
+  #pnl-nxt table th:nth-child(5),
+  #pnl-nxt table td:nth-child(5),
+  #pnl-nxt table th:nth-child(6),
+  #pnl-nxt table td:nth-child(6) { display: none; }
+
+  /* 봇로그 폰트 */
+  .log-entry { font-size: 10.5px; }
+  .log-time  { font-size: 9.5px; }
+
+  /* 매매계획 하단 그리드: 2열 유지, 내부 day-body는 단열로 */
+  .bottom-grid { grid-template-columns: 1fr 1fr; }
+  .day-body    { grid-template-columns: 1fr !important; overflow-y: auto; }
+  .day-hd      { padding: 4px 10px; }
+
+  /* 브리핑 패널: 3개 섹션을 세로 스택으로 */
+  #pnl-brief .pnl-bd {
+    flex-direction: column !important;
+    gap: 5px !important;
+  }
+  #pnl-brief .pnl-bd > div {
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0 !important;
+    padding-bottom: 5px;
+    max-height: 80px;
+    overflow-y: auto;
+  }
+  #pnl-brief .pnl-bd > div:last-child { border-bottom: none; }
+
+  /* 패널 헤더 축소 */
+  .pnl-hd { padding: 5px 10px; font-size: 11px; }
+  .pnl-hd .ico { font-size: 11px; }
+  .pnl-bd { padding: 6px 8px; }
+
+  /* 테이블 폰트 */
+  th { font-size: 10px; padding: 3px 4px; }
+  td { font-size: 11px; padding: 4px 4px; }
+
+  /* 스케줄러 */
+  .srow-name { font-size: 10px; }
+  .srow-time { font-size: 9px; }
+
+  /* 내비 버튼 위치 조정 */
+  .nav-float { bottom: 10px; right: 10px; }
+  .nav-btn   { padding: 6px 12px; font-size: 11px; }
+}
 </style>
 </head>
 <body>
@@ -374,13 +475,13 @@ tr:hover td { background: rgba(58,142,255,.05); }
     <div class="mi"><span class="mi-lbl">KOSDAQ</span><span class="mi-val" id="hk-kosdaq">--</span><span class="mi-chg" id="hk-kosdaq-c">--</span></div>
     <div class="mi"><span class="mi-lbl">USD/KRW</span><span class="mi-val" id="hk-usd">--</span><span class="mi-chg" id="hk-usd-c">--</span></div>
     <!-- 글로벌 -->
-    <div class="mi"><span class="mi-lbl">S&amp;P500</span><span class="mi-val" id="hk-sp">--</span><span class="mi-chg" id="hk-sp-c">--</span></div>
-    <div class="mi"><span class="mi-lbl">VIX</span><span class="mi-val" id="hk-vix">--</span><span class="mi-chg" id="hk-vix-c">--</span></div>
-    <div class="mi"><span class="mi-lbl">WTI</span><span class="mi-val" id="hk-wti">--</span><span class="mi-chg" id="hk-wti-c">--</span></div>
-    <div class="mi"><span class="mi-lbl">Gold</span><span class="mi-val" id="hk-gold">--</span><span class="mi-chg" id="hk-gold-c">--</span></div>
-    <div class="mi"><span class="mi-lbl">US10Y</span><span class="mi-val" id="hk-us10y">--</span><span class="mi-chg" id="hk-us10y-c">--</span></div>
+    <div class="mi" id="mi-sp"><span class="mi-lbl">S&amp;P500</span><span class="mi-val" id="hk-sp">--</span><span class="mi-chg" id="hk-sp-c">--</span></div>
+    <div class="mi" id="mi-vix"><span class="mi-lbl">VIX</span><span class="mi-val" id="hk-vix">--</span><span class="mi-chg" id="hk-vix-c">--</span></div>
+    <div class="mi" id="mi-wti"><span class="mi-lbl">WTI</span><span class="mi-val" id="hk-wti">--</span><span class="mi-chg" id="hk-wti-c">--</span></div>
+    <div class="mi" id="mi-gold"><span class="mi-lbl">Gold</span><span class="mi-val" id="hk-gold">--</span><span class="mi-chg" id="hk-gold-c">--</span></div>
+    <div class="mi" id="mi-us10y"><span class="mi-lbl">US10Y</span><span class="mi-val" id="hk-us10y">--</span><span class="mi-chg" id="hk-us10y-c">--</span></div>
     <!-- 봇 상태 -->
-    <div class="mi" style="min-width:88px;background:rgba(0,0,0,.2)">
+    <div class="mi" id="mi-syst" style="min-width:88px;background:rgba(0,0,0,.2)">
       <span class="mi-lbl">시스템</span>
       <span class="mi-val" id="hk-bot" style="font-size:11px">--</span>
       <span class="mi-chg" id="hk-mode" style="color:var(--muted);font-size:9px">--</span>
@@ -406,7 +507,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
 <div id="main">
 
   <!-- ① NXT 급상승 예측 (col3-4 row1) -->
-  <div class="pnl" style="grid-column:3/5;grid-row:1">
+  <div class="pnl" id="pnl-nxt" style="grid-column:3/5;grid-row:1">
     <div class="pnl-hd">
       <span class="ico">📡</span> NXT 급상승 예측
       <span id="nxt-stale-icon" title="" style="display:none;margin-left:4px;font-size:14px;cursor:help">⚠️</span>
@@ -446,7 +547,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
   </div>
 
   <!-- ② 포트폴리오 (col2 row1) -->
-  <div class="pnl" style="grid-column:2;grid-row:1">
+  <div class="pnl" id="pnl-port" style="grid-column:2;grid-row:1">
     <div class="pnl-hd">
       <span class="ico">💼</span> 포트폴리오 현황
       <span style="margin-left:auto;font-size:10px;color:var(--muted)" id="port-upd">--</span>
@@ -493,7 +594,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
   </div>
 
   <!-- ③ 봇 실시간 로그 (col3 row3) -->
-  <div class="pnl" style="grid-column:3;grid-row:3">
+  <div class="pnl" id="pnl-log" style="grid-column:3;grid-row:3">
     <div class="pnl-hd" style="position:relative;overflow:hidden">
       <span class="ico">⚡</span> 봇 실시간 로그
       <!-- 미니 스캔 라인 -->
@@ -530,7 +631,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
   </div>
 
   <!-- ④ 시장 분석 & 시사점 (col1 row1) — 뉴스+정책 탭 -->
-  <div class="pnl" style="grid-column:1;grid-row:1">
+  <div class="pnl" id="pnl-mkt" style="grid-column:1;grid-row:1">
     <div class="pnl-hd" style="padding:0;gap:0;overflow:visible">
       <!-- 탭 헤더 -->
       <div style="display:flex;align-items:stretch;height:100%;width:100%">
@@ -578,7 +679,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
   </div>
 
   <!-- ⑤ 봇 스케줄러 (col4 row3) -->
-  <div class="pnl" style="grid-column:4;grid-row:3">
+  <div class="pnl" id="pnl-sched" style="grid-column:4;grid-row:3">
     <div class="pnl-hd">
       <span class="ico">⚙️</span> 봇 스케줄러
       <span id="sched-progress" style="margin-left:6px;font-size:10px;color:var(--up)"></span>
@@ -594,7 +695,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
   </div>
 
   <!-- ⑥ 시간외 단일가 (col1 row3) -->
-  <div class="pnl" style="grid-column:1;grid-row:3">
+  <div class="pnl" id="pnl-after" style="grid-column:1;grid-row:3">
     <div class="pnl-hd">
       <span class="ico">🕐</span> 시간외 단일가
       <span style="margin-left:auto;font-size:10px;color:var(--muted)" id="ah-upd">--</span>
@@ -605,7 +706,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
   </div>
 
   <!-- ⑦ 봇 주요 브리핑 (col2 row3) -->
-  <div class="pnl" style="grid-column:2;grid-row:3">
+  <div class="pnl" id="pnl-brief" style="grid-column:2;grid-row:3">
     <div class="pnl-hd">
       <span class="ico">📋</span> 봇 주요 브리핑
       <span style="margin-left:auto;font-size:10px;color:var(--muted)" id="brief-upd">--</span>
@@ -630,7 +731,7 @@ tr:hover td { background: rgba(58,142,255,.05); }
   </div>
 
   <!-- ⑧ 오늘의 매매 계획 + 결과 (col1-4 row2) -->
-  <div class="pnl" style="grid-column:1/-1;grid-row:2">
+  <div class="pnl" id="pnl-day" style="grid-column:1/-1;grid-row:2">
     <div class="bottom-grid">
 
       <!-- NXT 장전거래 -->
