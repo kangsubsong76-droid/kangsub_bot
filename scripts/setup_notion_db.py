@@ -112,6 +112,24 @@ news_id = create_db("📰 뉴스/정책 분석", {
     "일시":     {"date": {}},
 })
 
+# ── 5. 일일 리뷰 DB ──
+review_id = create_db("📝 일일 리뷰", {
+    "일자":         {"title": {}},
+    "코스피등락":   {"number": {"format": "percent"}},
+    "포트수익률":   {"number": {"format": "percent"}},
+    "총평가금액":   {"number": {"format": "won"}},
+    "매수종목":     {"rich_text": {}},
+    "매도종목":     {"rich_text": {}},
+    "주요이슈":     {"rich_text": {}},
+    "내일전략":     {"rich_text": {}},
+    "시장분위기":   {"select": {"options": [
+        {"name": "강세", "color": "green"},
+        {"name": "약세", "color": "red"},
+        {"name": "보합", "color": "gray"},
+        {"name": "변동성확대", "color": "orange"},
+    ]}},
+})
+
 # ── .env 업데이트 안내 ──
 print("\n" + "=" * 50)
 print("✅ Notion DB 생성 완료!")
@@ -121,3 +139,4 @@ print(f"NOTION_DB_TRADES={trades_id}")
 print(f"NOTION_DB_PORTFOLIO={portfolio_id}")
 print(f"NOTION_DB_SIGNALS={signals_id}")
 print(f"NOTION_DB_NEWS={news_id}")
+print(f"NOTION_DB_REVIEW={review_id}")

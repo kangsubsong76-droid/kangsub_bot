@@ -84,6 +84,7 @@ NOTION_DB_TRADES = os.getenv("NOTION_DB_TRADES", "")
 NOTION_DB_PORTFOLIO = os.getenv("NOTION_DB_PORTFOLIO", "")
 NOTION_DB_SIGNALS = os.getenv("NOTION_DB_SIGNALS", "")
 NOTION_DB_NEWS = os.getenv("NOTION_DB_NEWS", "")
+NOTION_DB_REVIEW = os.getenv("NOTION_DB_REVIEW", "")
 
 # === 경로 ===
 DATA_DIR = BASE_DIR / "data" / "store"

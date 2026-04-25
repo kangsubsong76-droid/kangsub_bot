@@ -62,7 +62,7 @@ PAPER_TRADING = "--paper" in sys.argv
 class MainEngine:
     """KangSub Bot 핵심 실행 엔진"""
 
-    def __init__(self, paper: bool = True):
+    def __init__(self, paper: bool = False):
         self.paper = paper
         self.running = False
         self.auto_trading = True
