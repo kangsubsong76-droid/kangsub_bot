@@ -11,7 +11,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 DART_API_KEY = os.getenv("DART_API_KEY", "")
-KIWOOM_ACCOUNT = os.getenv("KIWOOM_ACCOUNT", "65947113")
+KIWOOM_ACCOUNT = os.getenv("KIWOOM_ACCOUNT", "65947112")
 KIWOOM_APP_KEY = os.getenv("KIWOOM_APP_KEY", "")
 KIWOOM_SECRET_KEY = os.getenv("KIWOOM_SECRET_KEY", "")
 KIWOOM_MOCK = os.getenv("KIWOOM_MOCK", "true").lower() == "true"  # True=모의투자
